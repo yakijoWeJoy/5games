@@ -57,7 +57,7 @@ small, .soft { color: var(--pencil-soft); }
 .ink0 { color: var(--ink0); }
 .ink1 { color: var(--ink1); }
 
-button { font: inherit; color: inherit; cursor: pointer; }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
 button:disabled { cursor: default; opacity: .45; }
 
 .btn {

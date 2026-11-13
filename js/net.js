@@ -33,7 +33,9 @@ class Base {
   send(d) { this.sendRaw(d); }
   handle(d, conn) {
     if (!d || typeof d !== 'object') return;
+    if (!this.local && conn !== this.conn && d.t !== 'hello') return; // an old / not accepted connection
     this.lastSeen = Date.now();
+    this.onTraffic(conn);
     if (d.t === 'ping') { this.sendRaw({ t: 'pong' }); return; }
     if (d.t === 'pong') return;
     this.onData(d, conn);
@@ -43,12 +45,14 @@ class Base {
     if (this.linked && Date.now() - this.lastSeen > 11000) this.onLost();
   }
   onLost() { this.setLinked(false); }
+  onTraffic() { /* overridden */ }
   startLocal() {
     this.local = true;
     this.bc = new BroadcastChannel('dv-' + this.code);
     this.bc.onmessage = e => { if (e.data && e.data.to === this.me) this.handle(e.data.d, null); };
   }
   destroy() {
+    this.dead = true;
     clearInterval(this.timer);
     clearTimeout(this.rt);
     try { this.conn && this.conn.close(); } catch { /* ignore */ }
@@ -73,7 +77,7 @@ export class HostNet extends Base {
   }
   makePeer() {
     const peer = this.peer = new window.Peer(PREFIX + this.code, { debug: 0 });
-    peer.on('open', () => this.status(this.linked ? 'linked' : 'waiting'));
+    peer.on('open', () => { this.cb.onOpen && this.cb.onOpen(); this.status(this.linked ? 'linked' : 'waiting'); });
     peer.on('connection', conn => {
       conn.on('data', d => this.handle(d, conn));
       conn.on('close', () => { if (conn === this.conn) { this.conn = null; this.setLinked(false); } });
@@ -86,11 +90,12 @@ export class HostNet extends Base {
     });
     peer.on('error', err => {
       if (err.type === 'unavailable-id') {
-        // our own old session is still registered on the server (page reload) – try again shortly
-        this.status('offline');
         try { peer.destroy(); } catch { /* ignore */ }
+        if (this.cb.onIdTaken && this.cb.onIdTaken()) return; // a brand new room got a code that is in use
+        // our own old session is still registered on the server (page reload) – try again shortly
+        this.status(this.linked ? 'linked' : 'waiting');
         clearTimeout(this.rt);
-        this.rt = setTimeout(() => this.makePeer(), 4000);
+        this.rt = setTimeout(() => { if (!this.dead) this.makePeer(); }, 2500);
       } else if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected'].includes(err.type)) {
         this.status(this.linked ? 'linked' : 'offline');
         clearTimeout(this.rt);
@@ -98,8 +103,19 @@ export class HostNet extends Base {
       }
     });
   }
+  onTraffic(conn) {
+    // messages are flowing again from the accepted guest (e.g. after the phone was asleep)
+    if (!this.linked && this.accepted && (this.local || (conn && conn === this.conn))) this.setLinked(true);
+    // test mode only: after a host reload the tabs are still "connected", so ask the guest to introduce itself again
+    if (this.local && !this.accepted) this.sendRaw({ t: 'who' });
+  }
+  onLost() {
+    super.onLost();
+    // the data channel went silent: drop it, the guest will dial in again
+    if (!this.local && this.conn) { const c = this.conn; this.conn = null; try { c.close(); } catch { /* ignore */ } }
+  }
   wake() {
-    if (this.local) return;
+    if (this.local || this.dead) return;
     if (!this.peer || this.peer.destroyed) this.makePeer();
     else if (this.peer.disconnected) { try { this.peer.reconnect(); } catch { /* ignore */ } }
   }
@@ -108,8 +124,11 @@ export class HostNet extends Base {
       if (this.cb.accept(d)) {
         if (!this.local && this.conn && this.conn !== conn) { try { this.conn.close(); } catch { /* ignore */ } }
         if (!this.local) this.conn = conn;
+        this.accepted = true;
         this.setLinked(true);
         this.cb.onHello(d);
+      } else if (!this.local && conn === this.conn) {
+        /* nonsense from the guest we already accepted – ignore it */
       } else if (this.local) {
         this.bc.postMessage({ to: 'guest', d: { t: 'full' } });
       } else {
@@ -118,13 +137,14 @@ export class HostNet extends Base {
       return;
     }
     if (!this.local && conn !== this.conn) return;
+    if (!this.linked) return;
     this.cb.onMessage(d);
   }
 }
 
 export class GuestNet extends Base {
   constructor(code, cb) { super(code, cb); this.me = 'guest'; this.other = 'host'; }
-  idleStatus() { return this._st === 'no-host' ? 'no-host' : 'waiting'; }
+  idleStatus() { return this.full ? 'full' : this._st === 'no-host' ? 'no-host' : 'waiting'; }
   start() {
     if (LOCAL) { this.startLocal(); this.status('waiting'); this.sendRaw(this.cb.hello()); return; }
     if (this.noPeerLib()) return;
@@ -132,7 +152,7 @@ export class GuestNet extends Base {
   }
   tick() {
     super.tick();
-    if (this.local && !this.linked) this.sendRaw(this.cb.hello());
+    if (this.local && !this.linked && !this.full) this.sendRaw(this.cb.hello());
   }
   makePeer() {
     const peer = this.peer = new window.Peer({ debug: 0 });
@@ -147,32 +167,41 @@ export class GuestNet extends Base {
   }
   connect() {
     if (!this.peer || this.peer.destroyed || this.peer.disconnected) { this.retry(1000); return; }
-    if (this.conn) { try { this.conn.close(); } catch { /* ignore */ } }
-    const conn = this.conn = this.peer.connect(PREFIX + this.code, { reliable: true });
+    if (this.conn) { const old = this.conn; this.conn = null; try { old.close(); } catch { /* ignore */ } }
+    const conn = this.conn = this.peer.connect(PREFIX + this.code, { reliable: true, serialization: 'json' });
     conn.on('open', () => { this.lastSeen = Date.now(); this.sendRaw(this.cb.hello()); });
-    conn.on('data', d => { if (conn === this.conn) this.handle(d); });
+    conn.on('data', d => { if (conn === this.conn) this.handle(d, conn); });
     conn.on('close', () => { if (conn === this.conn) { this.conn = null; this.setLinked(false); this.retry(2000); } });
     conn.on('error', () => { /* ignore */ });
     setTimeout(() => {
-      if (conn === this.conn && !conn.open) { try { conn.close(); } catch { /* ignore */ } this.conn = null; this.retry(500); }
-    }, 9000);
+      if (conn === this.conn && !conn.open) { this.conn = null; try { conn.close(); } catch { /* ignore */ } this.retry(500); }
+    }, 8000);
   }
   retry(ms) {
-    if (this.local) return;
+    if (this.local || this.dead || this.full) return;
     clearTimeout(this.rt);
     this.rt = setTimeout(() => {
+      if (this.dead || this.full) return;
       if (!this.peer || this.peer.destroyed) this.makePeer();
       else if (this.peer.disconnected) { try { this.peer.reconnect(); } catch { /* ignore */ } this.rt = setTimeout(() => this.connect(), 1500); }
       else this.connect();
     }, ms);
   }
   wake() {
+    if (this.full) { this.full = false; this._st = null; this.status('waiting'); }
     if (this.local) { if (!this.linked) this.sendRaw(this.cb.hello()); return; }
     if (!this.linked || Date.now() - this.lastSeen > 6000) this.retry(0);
   }
   onLost() { super.onLost(); this.retry(0); }
   onData(d) {
-    if (d.t === 'state' && !this.linked) this.setLinked(true);
+    if (d.t === 'full') {
+      // the room already has a second player – stop knocking until the player asks to try again
+      this.full = true; this.linked = false; clearTimeout(this.rt);
+      this.status('full');
+      return;
+    }
+    if (d.t === 'who') { if (!this.full) this.sendRaw(this.cb.hello()); return; }
+    if (d.t === 'state' && !this.linked) { this.full = false; this.setLinked(true); }
     this.cb.onMessage(d);
   }
 }

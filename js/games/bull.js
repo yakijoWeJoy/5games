@@ -1,4 +1,4 @@
-import { h } from '../ui.js';
+import { h, toast } from '../ui.js';
 
 const valid = c => typeof c === 'string' && /^\d{4}$/.test(c) && new Set(c).size === 4;
 function judge(secret, guess) {
@@ -123,7 +123,7 @@ export default {
 
     if (g.turn === me && !g.over) {
       root.append(...entryBox(rerender, () => {
-        if (g.guesses[me].some(x => x.code === ui.entry)) { ui.entry = ''; rerender(); return; }
+        if (g.guesses[me].some(x => x.code === ui.entry)) { toast('את הניחוש הזה כבר ניסית 🙂'); ui.entry = ''; rerender(); return; }
         send({ k: 'guess', code: ui.entry }); ui.entry = '';
       }, 'בדוק! 🎯'));
       root.querySelectorAll('.slot').forEach(el => { el.style.color = myInk; });

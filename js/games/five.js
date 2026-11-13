@@ -6,7 +6,7 @@ const DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
 
 let ui = { id: null };
 function sync(g) {
-  if (ui.id !== g.id) ui = { id: g.id, sel: null, cell: ui.cell || 30, scroll: null };
+  if (ui.id !== g.id) ui = { id: g.id, sel: null, cell: ui.cell || 30, scroll: null, seenLast: null };
 }
 
 export default {
@@ -127,8 +127,19 @@ export default {
 
     // keep the scroll position between updates; start in the middle of the sheet
     const focus = ui.scroll ? null : (g.last != null ? g.last : Math.floor(N * N / 2));
+    const newMove = g.last != null && g.last !== ui.seenLast;
+    ui.seenLast = g.last;
     requestAnimationFrame(() => {
-      if (ui.scroll) { wrap.scrollLeft = ui.scroll[0]; wrap.scrollTop = ui.scroll[1]; return; }
+      if (ui.scroll) {
+        wrap.scrollLeft = ui.scroll[0]; wrap.scrollTop = ui.scroll[1];
+        if (!newMove) return;
+        // a new mark that is outside the visible part of the sheet: slide over to it
+        const x = (g.last % N + .5) * cell, y = (Math.floor(g.last / N) + .5) * cell;
+        const seen = x > wrap.scrollLeft + cell / 2 && x < wrap.scrollLeft + wrap.clientWidth - cell / 2
+          && y > wrap.scrollTop + cell / 2 && y < wrap.scrollTop + wrap.clientHeight - cell / 2;
+        if (!seen) wrap.scrollTo({ left: x - wrap.clientWidth / 2, top: y - wrap.clientHeight / 2, behavior: 'smooth' });
+        return;
+      }
       const [x, y] = [(focus % N + .5) * cell, (Math.floor(focus / N) + .5) * cell];
       wrap.scrollLeft = x - wrap.clientWidth / 2;
       wrap.scrollTop = y - wrap.clientHeight / 2;

@@ -93,7 +93,8 @@ export default {
     if (g.phase !== 'play' || g.turn !== p) return false;
     const target = g.words[1 - p];
     if (a.k === 'letter') {
-      const l = norm(String(a.l || ''));
+      if (typeof a.l !== 'string') return false;
+      const l = norm(a.l);
       if (!lettersOf(target.lang).includes(l) || g.guessed[p].includes(l)) return false;
       g.guessed[p].push(l);
       g.last = { p, l, hit: needed(target.text).has(l) };
@@ -105,7 +106,8 @@ export default {
     }
     if (a.k === 'solve') {
       const clean = t => [...String(t || '')].filter(c => c !== ' ').map(norm).join('');
-      if (clean(a.text) && clean(a.text) === clean(target.text)) {
+      if (typeof a.text !== 'string' || !clean(a.text) || a.text.length > 40) return false;
+      if (clean(a.text) === clean(target.text)) {
         for (const l of needed(target.text)) if (!g.guessed[p].includes(l)) g.guessed[p].push(l);
         g.over = { winner: p };
         return true;
@@ -153,7 +155,7 @@ export default {
         return;
       }
       const lang = ui.lang;
-      const hintIn = h('input', { class: 'paper', placeholder: 'רמז (לא חובה) – למשל: חיה, עיר, שיר…', maxlength: 40, value: ui.hint });
+      const hintIn = h('input', { class: 'paper', placeholder: 'רמז (לא חובה) – למשל: חיה, עיר, שיר…', maxlength: 40, value: ui.hint, 'data-fk': 'hint' });
       hintIn.addEventListener('input', () => { ui.hint = hintIn.value; });
       const display = ui.entry
         ? h('div', { class: 'word', style: { direction: lang === 'en' ? 'ltr' : 'rtl', color: myInk } },

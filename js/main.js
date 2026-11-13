@@ -1,24 +1,34 @@
 import { h, toast, confirmBox, tally, buzz, rid } from './ui.js';
 import { HostNet, GuestNet, LOCAL } from './net.js';
-import bull from './games/bull.js';
-import hangman from './games/hangman.js';
-import ships from './games/ships.js';
-import dots from './games/dots.js';
-import five from './games/five.js';
+import { GAMES, BY, cleanName, newState, reduce } from './core.js';
 
-const GAMES = [bull, hangman, ships, dots, five];
-const BY = Object.fromEntries(GAMES.map(G => [G.id, G]));
 const params = new URLSearchParams(location.search);
 const NS = 'dv:' + (params.get('local') || '') + ':';
 
+// A second tab of the same browser (e.g. trying the game alone on a computer) keeps its own
+// session in sessionStorage, so the two tabs do not fight over one saved identity.
+let backing = null;
+try { backing = window.localStorage; } catch { /* storage blocked */ }
 const store = {
-  get(k, d) { try { const v = localStorage.getItem(NS + k); return v ? JSON.parse(v) : d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(NS + k, JSON.stringify(v)); } catch { /* ignore */ } },
-  del(k) { try { localStorage.removeItem(NS + k); } catch { /* ignore */ } },
+  get(k, d) { try { const v = backing.getItem(NS + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { backing.setItem(NS + k, JSON.stringify(v)); } catch { /* ignore */ } },
+  del(k) { try { backing.removeItem(NS + k); } catch { /* ignore */ } },
 };
+async function claimPrimaryTab() {
+  if (LOCAL || !navigator.locks) return;
+  try {
+    const got = await new Promise(res => {
+      navigator.locks.request('dv-primary-tab', { ifAvailable: true }, lock => {
+        res(!!lock);
+        return lock ? new Promise(() => { /* hold for the life of the tab */ }) : undefined;
+      }).catch(() => res(true));
+    });
+    if (!got) backing = window.sessionStorage;
+  } catch { /* ignore */ }
+}
 
 const app = document.getElementById('app');
-let session = store.get('session', null);
+let session = null;
 let state = null;
 let net = null;
 let link = 'waiting';
@@ -28,65 +38,10 @@ let prevGameKey = null;
 let seenChat = null;
 let chatOpen = false;
 let unread = 0;
+let outbox = [];        // guest: actions sent but not yet confirmed by the host
+let outboxTimer = null;
 
-const cleanName = n => String(n || '').trim().slice(0, 14) || 'שחקן';
-
-/* ======================= shared state & reducer ======================= */
-
-function newState(name, token) {
-  return {
-    v: 1, rev: 0,
-    players: [{ name, token }, { name: null, token: null }],
-    score: Object.fromEntries(GAMES.map(G => [G.id, [0, 0, 0]])), // [wins p0, wins p1, ties]
-    starter: Object.fromEntries(GAMES.map(G => [G.id, 0])),
-    current: null, game: null, lastDone: null,
-    chat: [],
-  };
-}
-
-function reduce(s, p, a) {
-  if (!a || typeof a !== 'object') return false;
-  switch (a.k) {
-    case 'chat': {
-      const text = String(a.text || '').trim().slice(0, 240);
-      if (!text) return false;
-      s.chat.push({ id: rid(), p, text, t: Date.now() });
-      if (s.chat.length > 80) s.chat.splice(0, s.chat.length - 80);
-      return true;
-    }
-    case 'pick': {
-      const G = BY[a.game];
-      if (!G || !s.players[1].token) return false;
-      const st = s.starter[a.game];
-      s.starter[a.game] = 1 - st;
-      s.current = a.game;
-      s.game = G.init(st);
-      s.game.id = rid();
-      s.game.counted = false;
-      return true;
-    }
-    case 'menu':
-      s.current = null; s.game = null; s.leftBy = p;
-      return true;
-    case 'resetScores':
-      s.score = Object.fromEntries(GAMES.map(G => [G.id, [0, 0, 0]]));
-      s.lastDone = null;
-      return true;
-    case 'g': {
-      if (!s.game || s.game.over) return false;
-      const G = BY[s.current];
-      if (G.apply(s.game, a.a, p) === false) return false;
-      if (s.game.over && !s.game.counted) {
-        const w = s.game.over.winner;
-        s.score[s.current][w == null ? 2 : w]++;
-        s.game.counted = true;
-        s.lastDone = s.current;
-      }
-      return true;
-    }
-  }
-  return false;
-}
+/* ======================= dispatching actions ======================= */
 
 function commit(s) {
   s.rev++;
@@ -96,25 +51,57 @@ function commit(s) {
   onState();
 }
 
-function hostDispatch(p, a) {
-  const s = structuredClone(state);
-  if (!reduce(s, p, a)) return;
+function hostDispatch(p, a, ackId) {
+  let s = structuredClone(state);
+  const ok = reduce(s, p, a);
+  if (!ok) {
+    if (!ackId) return;
+    s = structuredClone(state); // the action was refused – still confirm it so the guest stops re-sending
+  }
+  if (ackId) { s.acks = [...(s.acks || []), ackId].slice(-40); }
   commit(s);
 }
 
-function act(a) {
+/** Add the context the action was made in, so a late/duplicated action can never hit a different game. */
+function withContext(a) {
+  const gid = state && state.game ? state.game.id : null;
+  if (a.k === 'g') return { ...a, gid };
+  if (a.k === 'pick' || a.k === 'menu') return { ...a, from: gid };
+  return a;
+}
+
+function act(a0) {
+  const a = withContext(a0);
   if (session.role === 'host') { hostDispatch(0, a); return; }
   if (link !== 'linked') { toast('אין חיבור כרגע… מנסה להתחבר שוב'); net && net.wake(); return; }
-  net.send({ t: 'act', a });
+  const msg = { t: 'act', id: rid(10), a };
+  outbox.push({ msg, t: Date.now(), sent: Date.now() });
+  net.send(msg);
+}
+
+function flushOutbox(force) {
+  if (!outbox.length || !net) return;
+  const now = Date.now();
+  const keep = [];
+  let dropped = false;
+  for (const o of outbox) {
+    if (now - o.t > 25000) { dropped = true; continue; }
+    if (link === 'linked' && (force || now - o.sent > 2500)) { o.sent = now; net.send(o.msg); }
+    keep.push(o);
+  }
+  outbox = keep;
+  if (dropped) toast('הפעולה האחרונה לא נשלחה – נסו שוב');
 }
 
 /* ======================= networking ======================= */
 
 function startNet() {
   me = session.role === 'host' ? 0 : 1;
+  outbox = [];
+  clearInterval(outboxTimer);
   if (session.role === 'host') {
     net = new HostNet(session.code, {
-      accept: d => !state.players[1].token || state.players[1].token === d.token,
+      accept: d => !!d.token && (!state.players[1].token || state.players[1].token === d.token),
       onHello: d => {
         const s = structuredClone(state);
         const first = !s.players[1].token;
@@ -122,21 +109,50 @@ function startNet() {
         commit(s);
         if (first) toast(`${s.players[1].name} הצטרף/ה לדף! ✏️`);
       },
-      onMessage: d => { if (d.t === 'act') hostDispatch(1, d.a); },
+      onMessage: d => {
+        if (d.t !== 'act') return;
+        if (d.id && (state.acks || []).includes(d.id)) { net.send({ t: 'state', s: state }); return; } // duplicate
+        hostDispatch(1, d.a, d.id);
+      },
       onStatus: st => { link = st; render(); },
+      // the 4-digit code is already used by somebody else right now – quietly take another one
+      onIdTaken: () => {
+        if (!session.fresh || state.players[1].token) return false;
+        const old = session.code;
+        session.code = newCode();
+        store.set('session', session);
+        store.del('state:' + old);
+        store.set('state:' + session.code, state);
+        net.destroy();
+        startNet();
+        render();
+        return true;
+      },
+      onOpen: () => { if (session.fresh) { session.fresh = false; store.set('session', session); } },
     });
   } else {
     net = new GuestNet(session.code, {
       hello: () => ({ t: 'hello', token: session.token, name: session.name }),
       onMessage: d => {
-        if (d.t === 'state' && d.s) { state = d.s; store.set('gstate:' + session.code, state); onState(); }
-        else if (d.t === 'full') { link = 'full'; render(); }
+        if (d.t === 'state' && d.s) {
+          state = d.s;
+          store.set('gstate:' + session.code, state);
+          const acks = state.acks || [];
+          outbox = outbox.filter(o => !acks.includes(o.msg.id));
+          onState();
+        }
       },
-      onStatus: st => { link = st; render(); },
+      onStatus: st => { link = st; if (st === 'linked') flushOutbox(true); render(); },
     });
+    outboxTimer = setInterval(() => flushOutbox(false), 1000);
   }
   net.start();
 }
+
+const newCode = () => {
+  if (window.__dvForceCode) { const c = window.__dvForceCode; window.__dvForceCode = null; return c; } // test hook
+  return String(Math.floor(1000 + Math.random() * 9000));
+};
 
 /* ======================= reacting to state ======================= */
 
@@ -191,8 +207,16 @@ function render() {
   } else {
     kids.push(menuView(ctx));
   }
+  // keep the keyboard open if the player was typing while an update arrived
+  const act0 = document.activeElement;
+  const fk = act0 && app.contains(act0) && act0.dataset ? act0.dataset.fk : null;
+  const sel = fk ? [act0.selectionStart, act0.selectionEnd] : null;
   app.replaceChildren(...kids);
   if (gameRoot) G.render(gameRoot, state.game, ctx);
+  if (fk) {
+    const el = app.querySelector(`[data-fk="${fk}"]`);
+    if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } }
+  }
   ensureChatFab();
 }
 
@@ -216,9 +240,16 @@ function connNote() {
     waiting: me === 0 ? `מחכים ש${other} יתחבר/תתחבר…` : 'מתחבר…',
     'no-host': `לא מוצא את הדף של ${other}. האם המסך שלו/ה פתוח?`,
     offline: 'אין אינטרנט כרגע, מנסה שוב…',
-    full: 'בדף הזה כבר משחקים שניים 🙁',
+    full: 'בדף הזה כבר משחקים שניים 🙁 (המארח יכול ללחוץ "החלפת שותף")',
   }[link] || 'מתחבר…';
-  return h('div', { class: 'note warn' }, '📡 ', msg);
+  return h('div', { class: 'note warn' }, '📡 ', msg,
+    h('div', {},
+      link === 'full' ? h('button', { class: 'link-btn', onclick: () => net && net.wake() }, 'לנסות שוב') : null,
+      state ? h('button', { class: 'link-btn', onclick: askLeaveRoom }, 'יציאה מהדף') : null));
+}
+
+async function askLeaveRoom() {
+  if (await confirmBox('לצאת מהדף הזה? (אפשר לחזור עם הקוד)', 'יציאה', 'ביטול')) leaveRoom();
 }
 
 async function leaveGame() {
@@ -318,11 +349,7 @@ function menuView(ctx) {
       const s = structuredClone(state); s.players[1].token = null; commit(s);
     },
   }, 'החלפת שותף'));
-  foot.append(h('button', {
-    class: 'link-btn', onclick: async () => {
-      if (await confirmBox('לצאת מהדף הזה? (אפשר לחזור עם הקוד)', 'יציאה', 'ביטול')) leaveRoom();
-    },
-  }, 'יציאה מהדף'));
+  foot.append(h('button', { class: 'link-btn', onclick: askLeaveRoom }, 'יציאה מהדף'));
   wrap.append(foot);
   return wrap;
 }
@@ -435,8 +462,8 @@ function deviceToken() {
 }
 
 function startHost(name) {
-  const code = String(Math.floor(1000 + Math.random() * 9000));
-  session = { role: 'host', code, token: deviceToken(), name };
+  const code = newCode();
+  session = { role: 'host', code, token: deviceToken(), name, fresh: true };
   store.set('session', session);
   state = newState(name, session.token);
   store.set('state:' + code, state);
@@ -455,6 +482,7 @@ function startGuest(name, code) {
 
 function leaveRoom() {
   net && net.destroy(); net = null;
+  clearInterval(outboxTimer); outbox = [];
   store.del('session');
   session = null; state = null; seenChat = null; prevGameKey = null;
   closeChat();
@@ -482,11 +510,14 @@ document.addEventListener('visibilitychange', () => {
 
 /* ======================= boot ======================= */
 
-function boot() {
+async function boot() {
+  await claimPrimaryTab();
+  session = store.get('session', null);
   const room = (params.get('room') || '').replace(/\D/g, '').slice(0, 4);
   if (session && (!room || room === session.code)) {
     if (session.role === 'host') {
       state = store.get('state:' + session.code, null) || newState(session.name, session.token);
+      if (!state.acks) state.acks = [];
     } else {
       state = store.get('gstate:' + session.code, null);
     }
@@ -494,6 +525,9 @@ function boot() {
     state ? onState() : render();
     return;
   }
+  session = null;
   homeView(room || null);
 }
+// small handle for automated tests / debugging in the console
+window.__dv = { get net() { return net; }, get state() { return state; }, get link() { return link; }, get session() { return session; }, get outbox() { return outbox; } };
 boot();
