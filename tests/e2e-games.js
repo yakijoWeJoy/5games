@@ -96,6 +96,11 @@ const drivers = {
     const free = []; s.game.cells.forEach((v, i) => { if (v < 0) free.push(i); });
     const near = free.filter(i => Math.abs(Math.floor(i / 21) - 10) < 3 && Math.abs(i % 21 - 10) < 3);
     const i = pick(near.length ? near : free), r = Math.floor(i / 21), c = i % 21;
+    // a person waits for the sheet to stop sliding to the other player's mark before tapping
+    await p.evaluate(() => new Promise(res => {
+      const w = document.querySelector('.five-wrap'); let last = [-1, -1], still = 0;
+      const t = setInterval(() => { if (w.scrollLeft === last[0] && w.scrollTop === last[1]) { if (++still >= 3) { clearInterval(t); res(); } } else { still = 0; last = [w.scrollLeft, w.scrollTop]; } }, 40);
+    }));
     for (let k = 0; k < 2; k++) {
       // scroll the cell into view like a finger would, then tap it
       await p.evaluate(([r, c]) => {
@@ -125,14 +130,16 @@ const drivers = {
   const code = (await A.textContent('.code-big')).trim();
   await B.goto(BASE + `?local=guest&room=${code}`); await B.fill('input.paper', 'נועה'); await B.click('text=הצטרפות ✏️');
   let s = await settle(A, B);
-  const order = ['bull', 'hangman', 'ships', 'dots', 'five'];
+  const order = (process.argv[4] || 'bull,hangman,ships,dots,five').split(',');
+  const ALL = ['bull', 'hangman', 'ships', 'dots', 'five'];
   let played = 0;
   for (let round = 0; round < ROUNDS; round++) {
     for (const id of order) {
       s = await settle(A, B);
       const starter = pick([A, B]);
-      if (!s.game) await starter.click(`.game-row >> nth=${order.indexOf(id)}`);
-      else await starter.click('text=למשחק הבא');
+      if (!s.game) await starter.click(`.game-row >> nth=${ALL.indexOf(id)}`);
+      else if (order.length === 5) await starter.click('text=למשחק הבא');
+      else await starter.click('text=עוד סיבוב');
       let steps = 0;
       for (;;) {
         s = await settle(A, B);
