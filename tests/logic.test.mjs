@@ -453,4 +453,31 @@ const next = t => { const n = step(t, 0, { k: 'next' }); assert.ok(n, 'next'); r
   assert.deepEqual(t.game.line, [6 * 21 + 14, 10 * 21 + 10]);
 }
 
+// ---------- five in a row: every X and O is drawn inside its own square, in all 441 squares ----------
+{
+  const { markXD, roughCircleD } = await import('../js/ui.js');
+  const { FIVE } = await import('../js/games/five.js');
+  const { N, U, MARK_X, MARK_O } = FIVE;
+  const half = 1.5; // half of the pen width
+  let worst = 0;
+  for (let i = 0; i < N * N; i++) {
+    const cx = (i % N) * U + U / 2, cy = Math.floor(i / N) * U + U / 2;
+    for (const [name, d] of [['X', markXD(cx, cy, MARK_X).join(' ')], ['O', roughCircleD(cx, cy, MARK_O)]]) {
+      const nums = d.match(/-?\d+(\.\d+)?/g).map(Number);
+      assert.equal(nums.length % 2, 0);
+      let far = 0;
+      for (let k = 0; k < nums.length; k += 2) far = Math.max(far, Math.abs(nums[k] - cx), Math.abs(nums[k + 1] - cy));
+      worst = Math.max(worst, far + half);
+      assert.ok(far + half <= U / 2 - 1, `${name} in square ${i} reaches ${(far + half).toFixed(1)} from the centre (square is ±${U / 2})`);
+      assert.ok(far > U * .2, `${name} in square ${i} is too small`);
+    }
+    // an O must really go around its centre: points in all four quadrants
+    const o = roughCircleD(cx, cy, MARK_O).match(/-?\d+(\.\d+)?/g).map(Number);
+    const q = new Set();
+    for (let k = 0; k < o.length; k += 2) q.add((o[k] > cx ? 1 : 0) + (o[k + 1] > cy ? 2 : 0));
+    assert.equal(q.size, 4, `O in square ${i} is not centred on its square`);
+  }
+  console.log(`five in a row: all ${N * N} squares checked, marks stay within ${worst.toFixed(1)} of the centre (square edge at ${U / 2})`);
+}
+
 console.log('logic tests passed ✔', counts, 'evening after 60 series:', s.evening);

@@ -4,6 +4,8 @@ import { log } from '../log.js';
 const N = 21;      // a big sheet of squared paper
 const U = 30;      // drawing units per square
 const DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
+export const FIVE = { N, U, MARK_X: U * .27, MARK_O: U * .3 }; // mark sizes: always well inside the square
+const { MARK_X, MARK_O } = FIVE;
 
 // The board element lives as long as the game does: taps only redraw the marks, so the sheet never
 // jumps or loses its scroll position under the finger.
@@ -121,14 +123,14 @@ function paint() {
     width: px + 'px', height: px + 'px',
     backgroundImage: 'linear-gradient(rgba(70,120,190,.38) 1px, transparent 1px), linear-gradient(90deg, rgba(70,120,190,.38) 1px, transparent 1px)',
     backgroundSize: `${cell}px ${cell}px`,
-    backgroundColor: 'rgba(255,255,255,.4)',
+    backgroundColor: '#fdfcf6', // opaque: the notebook grid of the page must not show through the sheet
   });
   d.svg.setAttribute('width', px); d.svg.setAttribute('height', px);
 
   const center = i => [(i % N) * U + U / 2, Math.floor(i / N) * U + U / 2];
   const mark = (i, p, op) => {
     const [x, y] = center(i);
-    const m = p === 0 ? markX(x, y, U * .3, INK[0], 3.2) : markO(x, y, U * .33, INK[1], 3.2);
+    const m = p === 0 ? markX(x, y, MARK_X, INK[0], 3) : markO(x, y, MARK_O, INK[1], 3);
     if (op) m.setAttribute('opacity', op);
     return m;
   };

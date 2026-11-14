@@ -172,7 +172,8 @@ const drivers = {
       await A.waitForSelector('.result'); await B.waitForSelector('.result');
       if (s.series.results.length !== gi + 1) throw new Error(`series has ${s.series.results.length} results after game ${gi + 1}`);
       const dec = s.series.results.filter(r => r.winner === 0).length >= 3 || s.series.results.filter(r => r.winner === 1).length >= 3;
-      if (dec !== !!(await A.$('.verdict'))) throw new Error('series verdict on screen does not match the score');
+      // a verdict is shown once somebody has three wins, and in any case after the fifth game
+      if ((dec || s.series.results.length === 5) !== !!(await A.$('.verdict'))) throw new Error('series verdict on screen does not match the score');
       console.log(`  ${id.padEnd(8)} finished in ${String(steps).padStart(3)} steps, winner: ${s.game.over.winner === null ? 'tie' : s.players[s.game.over.winner].name}${replayed ? ' (after a replay)' : ''}`);
     }
     // five games done: no "next game" any more, only a new series

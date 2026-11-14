@@ -105,6 +105,15 @@ const SCENES = {
     for (const [r, c] of seq) G(s, s.game.turn, { k: 'put', i: r * 21 + c });
     return { state: s };
   },
+  'five-many': () => {
+    // lots of marks all over the sheet (never five in a row): shows that every mark sits inside its square
+    const s = mk(); playSeries(s, [0, 1, 0, 1]); A(s, 0, { k: 'next' });
+    const cells = [];
+    for (let r = 4; r < 17; r++) for (let c = 4; c < 17; c++) if ((r * 3 + c * 5) % 4 < 2) cells.push([r, c]);
+    const a = cells.filter(([r, c]) => (r + Math.floor(c / 2)) % 2 === 0), b = cells.filter(([r, c]) => (r + Math.floor(c / 2)) % 2 === 1);
+    for (let i = 0; i < Math.min(a.length, b.length) && !s.game.over; i++) { G(s, s.game.turn, { k: 'put', i: a[i][0] * 21 + a[i][1] }); if (!s.game.over) G(s, s.game.turn, { k: 'put', i: b[i][0] * 21 + b[i][1] }); }
+    return { state: s };
+  },
   'five-over': () => { const s = mk(); playSeries(s, [0, 1, 0, 1, 1]); return { state: s }; },
   decided: () => { const s = mk(); playSeries(s, [1, 1, 1]); return { state: s }; },
   'decided-menu': () => { const s = mk(); playSeries(s, [0, 0, 0]); A(s, 0, { k: 'menu' }); return { state: s }; },

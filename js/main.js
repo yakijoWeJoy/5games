@@ -693,7 +693,21 @@ document.addEventListener('visibilitychange', () => {
 
 /* ======================= boot ======================= */
 
+/** index.html and the scripts must come from the same release (a browser can hold a mix right after an update) */
+function mixedVersions() {
+  if (!window.__dvV || window.__dvV === VERSION) return false;
+  log('mixed-versions', `page ${window.__dvV} scripts ${VERSION}`, true);
+  let tried = false;
+  try { tried = sessionStorage.getItem('dv:mixfix') === VERSION; sessionStorage.setItem('dv:mixfix', VERSION); } catch { /* ignore */ }
+  if (tried) return false;
+  const u = new URL(location.href);
+  u.searchParams.set('r', Date.now().toString(36)); // a fresh address makes the browser fetch a fresh page
+  location.replace(u.toString());
+  return true;
+}
+
 async function boot() {
+  if (mixedVersions()) return;
   if (DEMO) {
     const { demoState } = await import('./demo.js');
     me = params.get('me') === '1' ? 1 : 0;

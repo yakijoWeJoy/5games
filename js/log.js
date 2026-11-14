@@ -4,13 +4,13 @@
  * secret codes or words. Batches are posted to a write-only style topic on ntfy.sh so that problems
  * seen on real phones can be investigated afterwards. Read with: tools/logs.sh
  */
-export const VERSION = '2.1';
+export const VERSION = '2.2';
 const TOPIC = (typeof window !== 'undefined' && window.__dvLogTopic) || 'dv5g-logs-k7q2m9x4t1';
 const URL_ = 'https://ntfy.sh/' + TOPIC;
 const params = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
 const isLocalHost = typeof location !== 'undefined' && /^(localhost|127\.|\[::1\])/.test(location.hostname);
 // no remote logging in automated/local runs unless a test asks for it explicitly
-const ENABLED = typeof window !== 'undefined' && (!!window.__dvLogTopic || (!params.has('local') && !isLocalHost));
+const ENABLED = typeof window !== 'undefined' && (!!window.__dvLogTopic || (!params.has('local') && !params.has('demo') && !isLocalHost));
 const MAX_POSTS_PER_DAY = 120;
 const T0 = Date.now();
 

@@ -27,7 +27,7 @@ const DEVICES = [
   { name: 'ultrawide-3440 (as seen in the logs)', w: 3440, h: 1440, dpr: 1, mobile: false },
 ];
 const SCENES = ['home', 'join', 'invite', 'menu', 'menu-mid', 'bull-secret', 'bull-play', 'bull-over', 'hangman-word', 'hangman-play',
-  'ships-place', 'ships-play', 'dots', 'five', 'five-over', 'decided', 'decided-menu', 'done-menu', 'lost'];
+  'ships-place', 'ships-play', 'dots', 'five', 'five-many', 'five-over', 'decided', 'decided-menu', 'done-menu', 'lost'];
 
 const CHECK = () => {
   const issues = [];
@@ -64,8 +64,27 @@ const CHECK = () => {
     const r = el.getBoundingClientRect();
     if (r.width < 1 && r.height < 1) { issues.push('a drawn mark has no size'); break; }
   }
+  // five in a row: every X / O must sit inside one square of the sheet, as it is really painted
+  const fb = document.querySelector('.five-board');
+  if (fb) {
+    const b = fb.getBoundingClientRect(), cell = b.width / 21;
+    let n = 0;
+    for (const m of fb.querySelectorAll('svg > g, svg > path')) {
+      if (m.getAttribute('opacity') === '0.8') continue; // the winning line
+      const r = m.getBoundingClientRect();
+      if (!r.width) continue;
+      n++;
+      const c0 = Math.floor((r.left + r.width / 2 - b.left) / cell), r0 = Math.floor((r.top + r.height / 2 - b.top) / cell);
+      const inside = r.left >= b.left + c0 * cell - .5 && r.right <= b.left + (c0 + 1) * cell + .5 && r.top >= b.top + r0 * cell - .5 && r.bottom <= b.top + (r0 + 1) * cell + .5;
+      if (!inside) issues.push(`five: a mark spills out of its square (row ${r0 + 1}, column ${c0 + 1})`);
+    }
+    const want = window.__dv.state.game.cells.filter(x => x >= 0).length;
+    if (n !== want) issues.push(`five: ${n} marks painted for ${want} marks in the game`);
+  }
   return [...new Set(issues)].slice(0, 8);
 };
+
+const ONLY = process.env.SCENES ? process.env.SCENES.split(',') : null; // e.g. SCENES=five,five-many
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
@@ -78,6 +97,7 @@ const CHECK = () => {
     page.on('pageerror', e => errs.push(e.message));
     const tag = d.name.split(' ')[0];
     for (const sc of SCENES) {
+      if (ONLY && !ONLY.includes(sc)) continue;
       for (const me of sc === 'home' || sc === 'join' || sc === 'invite' ? [0] : [0, 1]) {
         total++;
         await page.goto(`${BASE}?demo=${sc}&me=${me}`);

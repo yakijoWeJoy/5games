@@ -79,13 +79,32 @@ export function roughD(x1, y1, x2, y2, amp) {
 export function roughLine(x1, y1, x2, y2, attrs, amp) {
   return s('path', { d: roughD(x1, y1, x2, y2, amp), fill: 'none', 'stroke-linecap': 'round', ...attrs });
 }
-/** a circle drawn in one go: slightly squashed and not perfectly closed */
-export function roughCircle(cx, cy, r, attrs) {
+/**
+ * Path data of a circle drawn in one go: slightly squashed, slightly tilted, the pen overlapping a
+ * little where the loop closes. Built from points around the centre (never from an SVG arc, whose
+ * centre can flip to the wrong side), so the shape always stays within r * 1.12 of (cx, cy).
+ */
+export function roughCircleD(cx, cy, r) {
   const seed = cx * 1.3 + cy * 2.9 + r;
-  const a0 = -1.9 + jit(seed) * .8, a1 = a0 + Math.PI * 2.07;
-  const rx = r * (1 + jit(seed + 1) * .08), ry = r * (0.95 + jit(seed + 2) * .08);
-  const p = (a, k) => `${f1(cx + Math.cos(a) * rx * k)} ${f1(cy + Math.sin(a) * ry * k)}`;
-  return s('path', { d: `M${p(a0, 1)} A${f1(rx)} ${f1(ry)} 0 1 1 ${p(a1, 1.05)}`, fill: 'none', 'stroke-linecap': 'round', ...attrs });
+  const n = 12;
+  const a0 = -1.9 + jit(seed) * .8;
+  const squash = 0.95 + jit(seed + 2) * .06;
+  const tilt = jit(seed + 3) * .6, ct = Math.cos(tilt), st = Math.sin(tilt);
+  const pts = [];
+  for (let i = 0; i <= n + 2; i++) {
+    const a = a0 + (i / n) * Math.PI * 2;
+    const k = 0.99 + jit(seed + 10 + (i % n)) * 0.05 + (i > n ? 0.035 : 0);
+    const x = Math.cos(a) * r * k, y = Math.sin(a) * r * k * squash;
+    pts.push([cx + x * ct - y * st, cy + x * st + y * ct]);
+  }
+  let d = `M${f1(pts[0][0])} ${f1(pts[0][1])}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    d += ` Q${f1(pts[i][0])} ${f1(pts[i][1])} ${f1((pts[i][0] + pts[i + 1][0]) / 2)} ${f1((pts[i][1] + pts[i + 1][1]) / 2)}`;
+  }
+  return d;
+}
+export function roughCircle(cx, cy, r, attrs) {
+  return s('path', { d: roughCircleD(cx, cy, r), fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', ...attrs });
 }
 
 /** Tally marks in groups of five, like on the scoring page. */
@@ -106,12 +125,14 @@ export function tally(n, p) {
   return svg;
 }
 
+/** path data of the two strokes of an X (centre cx,cy, half-size r) */
+export function markXD(cx, cy, r) {
+  return [roughD(cx - r, cy - r, cx + r, cy + r, r * .09), roughD(cx + r, cy - r, cx - r * .95, cy + r * .98, r * .09)];
+}
 /** Hand-drawn X and O marks (centered at cx,cy, size r). */
 export function markX(cx, cy, r, color, width = 3) {
-  const st = { stroke: color, 'stroke-width': width };
-  return s('g', {},
-    roughLine(cx - r, cy - r, cx + r, cy + r, st, r * .09),
-    roughLine(cx + r, cy - r, cx - r * .95, cy + r * 1.05, st, r * .09));
+  const st = { stroke: color, 'stroke-width': width, fill: 'none', 'stroke-linecap': 'round' };
+  return s('g', {}, markXD(cx, cy, r).map(d => s('path', { d, ...st })));
 }
 export function markO(cx, cy, r, color, width = 3) {
   return roughCircle(cx, cy, r, { stroke: color, 'stroke-width': width });
