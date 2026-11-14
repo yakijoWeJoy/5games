@@ -65,6 +65,7 @@ async function turnOf(A, B, want) {
 }
 async function newCtx() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  if (!CFG) await ctx.addInitScript(() => { window.__dvLogTopic = 'dv5g-selftest-ci'; }); // keep test runs out of the real log
   if (CFG) await ctx.addInitScript(cfg => { window.__dvBrokers = cfg.brokers; if (cfg.noDirect) window.__dvNoDirect = true; }, CFG);
   return ctx;
 }
