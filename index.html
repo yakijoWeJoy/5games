@@ -16,17 +16,6 @@
 <script src="js/vendor/peerjs.min.js"></script>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <filter id="rough" filterUnits="userSpaceOnUse" x="-200" y="-200" width="4000" height="4000">
-      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" result="n"/>
-      <feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-    <pattern id="hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(40)">
-      <line x1="0" y1="0" x2="0" y2="7" stroke="#555" stroke-width="2.2" opacity=".55"/>
-    </pattern>
-  </defs>
-</svg>
 <div id="app"></div>
 <script type="module" src="js/main.js"></script>
 </body>

@@ -96,6 +96,7 @@ export default {
   },
 
   render(root, g, ctx) {
+    root.replaceChildren();
     sync(g);
     const { me, other, names, send } = ctx;
     const myInk = `var(--ink${me})`, theirInk = `var(--ink${other})`;

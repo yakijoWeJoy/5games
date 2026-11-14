@@ -61,6 +61,33 @@ export function buzz(pattern = 40) {
   } catch { /* ignore */ }
 }
 
+/* ---------- hand-drawn strokes, as plain geometry (no SVG filters: some phone browsers do not paint them) ---------- */
+
+const jit = seed => { const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x) - 0.5; };
+const f1 = n => n.toFixed(1);
+
+/** path data of a slightly wobbly line, like one drawn by hand. Deterministic for the same input. */
+export function roughD(x1, y1, x2, y2, amp) {
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  const a = amp == null ? Math.min(2.4, 0.5 + len * 0.02) : amp;
+  const seed = x1 * 3.1 + y1 * 7.3 + x2 * 1.7 + y2 * 5.9;
+  const nx = -(y2 - y1) / len, ny = (x2 - x1) / len;
+  const pt = (t, o) => `${f1(x1 + (x2 - x1) * t + nx * o)} ${f1(y1 + (y2 - y1) * t + ny * o)}`;
+  const o1 = jit(seed + 2) * 2 * a, o2 = jit(seed + 3) * 2 * a;
+  return `M${pt(jit(seed + 4) * 0.02, jit(seed + 5) * a * .6)} C${pt(0.3 + jit(seed) * 0.1, o1)} ${pt(0.7 + jit(seed + 1) * 0.1, o2)} ${pt(1 + jit(seed + 6) * 0.02, jit(seed + 7) * a * .6)}`;
+}
+export function roughLine(x1, y1, x2, y2, attrs, amp) {
+  return s('path', { d: roughD(x1, y1, x2, y2, amp), fill: 'none', 'stroke-linecap': 'round', ...attrs });
+}
+/** a circle drawn in one go: slightly squashed and not perfectly closed */
+export function roughCircle(cx, cy, r, attrs) {
+  const seed = cx * 1.3 + cy * 2.9 + r;
+  const a0 = -1.9 + jit(seed) * .8, a1 = a0 + Math.PI * 2.07;
+  const rx = r * (1 + jit(seed + 1) * .08), ry = r * (0.95 + jit(seed + 2) * .08);
+  const p = (a, k) => `${f1(cx + Math.cos(a) * rx * k)} ${f1(cy + Math.sin(a) * ry * k)}`;
+  return s('path', { d: `M${p(a0, 1)} A${f1(rx)} ${f1(ry)} 0 1 1 ${p(a1, 1.05)}`, fill: 'none', 'stroke-linecap': 'round', ...attrs });
+}
+
 /** Tally marks in groups of five, like on the scoring page. */
 export function tally(n, p) {
   const groups = Math.max(1, Math.ceil(n / 5));
@@ -70,30 +97,24 @@ export function tally(n, p) {
     svg.append(s('path', { d: 'M6 12 L16 12', stroke: INK[p], 'stroke-width': 2, opacity: .35, 'stroke-linecap': 'round' }));
     return svg;
   }
-  const g = s('g', { stroke: INK[p], 'stroke-width': 2.2, 'stroke-linecap': 'round', fill: 'none', filter: 'url(#rough)' });
+  const st = { stroke: INK[p], 'stroke-width': 2.2 };
   for (let i = 0; i < n; i++) {
     const grp = Math.floor(i / 5), k = i % 5, x0 = grp * 30 + 5;
-    if (k < 4) { const x = x0 + k * 5.5; g.append(s('path', { d: `M${x} 3 L${x + .7} 19` })); }
-    else g.append(s('path', { d: `M${x0 - 3} 16 L${x0 + 20} 6` }));
+    if (k < 4) { const x = x0 + k * 5.5; svg.append(roughLine(x, 3, x + .7, 19, st, .5)); }
+    else svg.append(roughLine(x0 - 3, 16, x0 + 20, 6, st, .6));
   }
-  svg.append(g);
   return svg;
 }
 
 /** Hand-drawn X and O marks (centered at cx,cy, size r). */
 export function markX(cx, cy, r, color, width = 3) {
-  return s('g', { stroke: color, 'stroke-width': width, 'stroke-linecap': 'round', filter: 'url(#rough)' },
-    s('path', { d: `M${cx - r} ${cy - r} L${cx + r} ${cy + r}` }),
-    s('path', { d: `M${cx + r} ${cy - r} L${cx - r * .95} ${cy + r * 1.05}` }));
+  const st = { stroke: color, 'stroke-width': width };
+  return s('g', {},
+    roughLine(cx - r, cy - r, cx + r, cy + r, st, r * .09),
+    roughLine(cx + r, cy - r, cx - r * .95, cy + r * 1.05, st, r * .09));
 }
 export function markO(cx, cy, r, color, width = 3) {
-  // slightly open circle, like drawn in one stroke
-  const a0 = -1.9, a1 = a0 + Math.PI * 2.08;
-  const p = (a, rr) => `${(cx + Math.cos(a) * rr).toFixed(1)} ${(cy + Math.sin(a) * rr).toFixed(1)}`;
-  return s('path', {
-    d: `M${p(a0, r)} A${r} ${r * .95} 0 1 1 ${p(a1, r * 1.04)}`,
-    stroke: color, 'stroke-width': width, fill: 'none', 'stroke-linecap': 'round', filter: 'url(#rough)',
-  });
+  return roughCircle(cx, cy, r, { stroke: color, 'stroke-width': width });
 }
 export function markDot(cx, cy, r, color) {
   return s('circle', { cx, cy, r, fill: color });

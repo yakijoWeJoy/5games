@@ -1,4 +1,4 @@
-import { h, s, INK } from '../ui.js';
+import { h, s, INK, roughD } from '../ui.js';
 
 const D = 6;            // dots per side
 const B = D - 1;        // boxes per side
@@ -60,6 +60,7 @@ export default {
   },
 
   render(root, g, ctx) {
+    root.replaceChildren();
     const { me, names, send } = ctx;
     const myTurn = g.turn === me && !g.over;
     const flat = g.box.flat();
@@ -78,7 +79,7 @@ export default {
       svg.append(s('rect', { x: px(c) + 4, y: px(r) + 4, width: GAP - 8, height: GAP - 8, fill: INK[o], opacity: .07 }));
       svg.append(s('text', {
         x: px(c) + GAP / 2, y: px(r) + GAP / 2 + 13, 'text-anchor': 'middle', 'font-size': 40, 'font-weight': 700, 'font-family': 'Amatic SC, sans-serif',
-        fill: INK[o], filter: 'url(#rough)', transform: `rotate(${((r * 7 + c * 13) % 9) - 4} ${px(c) + GAP / 2} ${px(r) + GAP / 2})`,
+        fill: INK[o], transform: `rotate(${((r * 7 + c * 13) % 9) - 4} ${px(c) + GAP / 2} ${px(r) + GAP / 2})`,
       }, (names[o] || '?').trim()[0]));
     }
 
@@ -88,11 +89,11 @@ export default {
       const [x1, y1, x2, y2] = line(last.o, last.r, last.c);
       svg.append(s('path', { d: `M${x1} ${y1} L${x2} ${y2}`, stroke: '#ffe45c', 'stroke-width': 12, 'stroke-linecap': 'round', opacity: .8 }));
     }
-    const drawn = s('g', { 'stroke-width': 4, 'stroke-linecap': 'round', filter: 'url(#rough)' });
+    const drawn = s('g', { 'stroke-width': 4, 'stroke-linecap': 'round', fill: 'none' });
     const hits = s('g', {});
     const addEdge = (o, r, c, who) => {
       const [x1, y1, x2, y2] = line(o, r, c);
-      if (who >= 0) { drawn.append(s('path', { d: `M${x1} ${y1} L${x2} ${y2}`, stroke: INK[who] })); return; }
+      if (who >= 0) { drawn.append(s('path', { d: roughD(x1, y1, x2, y2, 1.3), stroke: INK[who] })); return; }
       if (!myTurn) return;
       // the whole diamond around a missing line is tappable
       const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, half = GAP / 2;

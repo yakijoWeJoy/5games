@@ -1,4 +1,4 @@
-import { h, s } from '../ui.js';
+import { h, s, roughLine, roughCircle } from '../ui.js';
 
 const MAX = 10;
 const HE = 'אבגדהוזחטיכלמנסעפצקרשת'.split('');
@@ -32,21 +32,18 @@ function sync(g) {
 
 /** The gallows, drawn stroke by stroke. */
 export function gallows(n, color, size = 150) {
+  const st = { stroke: color, 'stroke-width': 3 };
   const parts = [
-    'M10 122 L112 122', 'M32 122 L32 10', 'M32 10 L86 10', 'M86 10 L86 26', null,
-    'M86 50 L86 84', 'M86 58 L70 74', 'M86 58 L102 74', 'M86 84 L73 106', 'M86 84 L99 106',
+    () => roughLine(10, 122, 112, 122, st), () => roughLine(32, 122, 32, 10, st), () => roughLine(32, 10, 86, 10, st),
+    () => roughLine(86, 10, 86, 26, st, .4), () => roughCircle(86, 38, 12, st),
+    () => roughLine(86, 50, 86, 84, st, .6), () => roughLine(86, 58, 70, 74, st, .5), () => roughLine(86, 58, 102, 74, st, .5),
+    () => roughLine(86, 84, 73, 106, st, .5), () => roughLine(86, 84, 99, 106, st, .5),
   ];
-  const g = s('g', { stroke: color, 'stroke-width': 3, 'stroke-linecap': 'round', fill: 'none', filter: 'url(#rough)' });
-  for (let i = 0; i < Math.min(n, MAX); i++) {
-    if (i === 4) g.append(s('circle', { cx: 86, cy: 38, r: 12 }));
-    else g.append(s('path', { d: parts[i] }));
-  }
-  if (n >= 3) g.append(s('path', { d: 'M32 30 L50 10', 'stroke-width': 2 }));
-  if (n >= MAX) {
-    g.append(s('path', { d: 'M80 34 L84 38 M84 34 L80 38 M88 34 L92 38 M92 34 L88 38', 'stroke-width': 1.6 }));
-  }
   const svg = s('svg', { viewBox: '0 0 120 130', width: size, height: size * 130 / 120, class: 'gallows' });
-  svg.append(s('path', { d: 'M10 122 L112 122', stroke: '#000', 'stroke-opacity': .07, 'stroke-width': 3 }), g);
+  svg.append(s('path', { d: 'M10 122 L112 122', stroke: '#000', 'stroke-opacity': .07, 'stroke-width': 3 }));
+  for (let i = 0; i < Math.min(n, MAX); i++) svg.append(parts[i]());
+  if (n >= 3) svg.append(roughLine(32, 30, 50, 10, { stroke: color, 'stroke-width': 2 }, .4));
+  if (n >= MAX) svg.append(s('path', { d: 'M80 34 L84 38 M84 34 L80 38 M88 34 L92 38 M92 34 L88 38', stroke: color, 'stroke-width': 1.6, 'stroke-linecap': 'round' }));
   return svg;
 }
 
@@ -99,8 +96,11 @@ export default {
       g.guessed[p].push(l);
       g.last = { p, l, hit: needed(target.text).has(l) };
       if (g.last.hit) {
-        if (isSolved(target.text, g.guessed[p])) { g.over = { winner: p }; return true; }
-      } else if (++g.wrong[p] >= MAX) { g.over = { winner: 1 - p, hanged: p }; return true; }
+        // a letter that is in the word earns another turn
+        if (isSolved(target.text, g.guessed[p])) g.over = { winner: p };
+        return true;
+      }
+      if (++g.wrong[p] >= MAX) { g.over = { winner: 1 - p, hanged: p }; return true; }
       g.turn = 1 - p;
       return true;
     }
@@ -126,12 +126,15 @@ export default {
         ? { mine: false, text: `מחכים ש${names[other]} יבחר/תבחר מילה…` }
         : { mine: true, text: 'בחרו מילה סודית ✏️' };
     }
-    let t = '';
-    if (g.last && g.last.p === other) {
-      t = g.last.word ? `${names[other]} ניסה/תה "${g.last.word}" – לא! · ` :
-        `${names[other]} שאל/ה "${g.last.l}" – ${g.last.hit ? 'יש!' : 'אין'} · `;
+    const L = g.last;
+    if (g.turn === me) {
+      if (L && L.p === me && L.hit) return { mine: true, text: `יש "${L.l}"! עוד תור ✨` };
+      let t = '';
+      if (L && L.p === other) t = L.word ? `${names[other]} ניסה/תה "${L.word}" – לא! · ` : `${names[other]} שאל/ה "${L.l}" – אין · `;
+      return { mine: true, text: t + 'תורך לבחור אות' };
     }
-    return g.turn === me ? { mine: true, text: t + 'תורך לבחור אות' } : { mine: false, text: `התור של ${names[other]}…` };
+    if (L && L.p === other && L.hit) return { mine: false, text: `${names[other]} מצא/ה "${L.l}" וממשיך/ה…` };
+    return { mine: false, text: `התור של ${names[other]}…` };
   },
 
   overDetail(g, { me, other, names }) {
@@ -140,6 +143,7 @@ export default {
   },
 
   render(root, g, ctx) {
+    root.replaceChildren();
     sync(g);
     const { me, other, names, send } = ctx;
     const myInk = `var(--ink${me})`, theirInk = `var(--ink${other})`;

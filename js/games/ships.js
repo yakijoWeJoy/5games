@@ -114,11 +114,12 @@ function board({ small = false, cellInfo, onCell, enabled }) {
     b.append(h('div', { class: 'lbl' }, r + 1));
     for (let c = 0; c < N; c++) {
       const info = cellInfo(r, c);
-      const el = h('button', {
-        class: 'cell ' + (info.cls || '') + (enabled && enabled(r, c) ? ' hot' : ''),
-        disabled: !(enabled && enabled(r, c)),
-        'aria-label': coord(r, c),
-        onclick: () => onCell && onCell(r, c),
+      const on = !!(enabled && enabled(r, c));
+      // a plain div (not a <button>): phone browsers paint the marks inside it reliably
+      const el = h('div', {
+        class: 'cell ' + (info.cls || '') + (on ? ' hot' : ''),
+        role: 'button', 'aria-label': coord(r, c), 'aria-disabled': on ? null : 'true', tabindex: on ? 0 : null,
+        onclick: on && onCell ? () => onCell(r, c) : null,
       });
       if (info.mark) el.append(cellSvg(info.mark, info.color));
       b.append(el);
@@ -134,7 +135,7 @@ function shipIcon(d, rot = 0, flip = 0, on = false) {
   const svg = s('svg', { width: C * u + 2, height: R * u + 2, viewBox: `-1 -1 ${C * u + 2} ${R * u + 2}`, style: 'direction:ltr' });
   for (const [r, c] of cs) {
     // columns are drawn right-to-left like on the board
-    svg.append(s('rect', { x: (C - 1 - c) * u, y: r * u, width: u, height: u, fill: on ? 'url(#hatch)' : 'url(#hatch)', stroke: '#3b3a36', 'stroke-width': 1.2 }));
+    svg.append(s('rect', { x: (C - 1 - c) * u, y: r * u, width: u, height: u, fill: '#3b3a36', 'fill-opacity': .28, stroke: '#3b3a36', 'stroke-width': 1.2 }));
   }
   return svg;
 }
@@ -172,7 +173,7 @@ export default {
       g.shots[p][g.shots[p].length - 1].res = res;
       g.last = { p, r, c, res, ship: res === 'sunk' ? sh.id : null };
       if (g.sunk[p].length === SHIPS.length) { g.over = { winner: p }; return true; }
-      g.turn = 1 - p;
+      if (res === 'miss') g.turn = 1 - p; // a hit earns another shot
       return true;
     }
     return false;
@@ -190,7 +191,9 @@ export default {
       const res = g.last.res === 'sunk' ? `טביעה!! ${DEF[g.last.ship].name} 🌊` : g.last.res === 'hit' ? 'פגיעה! 💥' : 'החטאה';
       t = `${who} ב${coord(g.last.r, g.last.c)} – ${res} · `;
     }
-    return g.turn === me ? { mine: true, text: t + 'תורך לירות 🎯' } : { mine: false, text: t + `התור של ${names[other]}` };
+    const again = g.last && g.last.res !== 'miss';
+    if (g.turn === me) return { mine: true, text: t + (again ? 'עוד תור! 🎯' : 'תורך לירות 🎯') };
+    return { mine: false, text: t + (again ? `${names[other]} ממשיך/ה…` : `התור של ${names[other]}`) };
   },
 
   overDetail(g, { me }) {
@@ -198,6 +201,7 @@ export default {
   },
 
   render(root, g, ctx) {
+    root.replaceChildren();
     sync(g);
     const { me, other, names, send } = ctx;
     const myInk = INK[me], theirInk = INK[other];

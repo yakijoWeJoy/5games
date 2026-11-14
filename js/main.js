@@ -1,7 +1,7 @@
 import { h, toast, confirmBox, tally, buzz, rid } from './ui.js';
 import { Link, LOCAL } from './net.js';
 import { log, flush as flushLog, setLogContext, dev as logDev, ring as logRing, VERSION } from './log.js';
-import { GAMES, BY, cleanName, newState, reduce } from './core.js';
+import { GAMES, BY, STATE_V, NEED, cleanName, newState, reduce, seriesWins, seriesDone, seriesDecided, seriesLeader, nextGame } from './core.js';
 
 const params = new URLSearchParams(location.search);
 const NS = 'dv:' + (params.get('local') || '') + ':';
@@ -44,6 +44,7 @@ let outboxTimer = null;
 let loggedOver = null;
 let lastView = null;
 let techOpen = false;
+const DEMO = params.has('demo'); // canned screens for visual tests, no network
 
 /* ======================= dispatching actions ======================= */
 
@@ -57,7 +58,7 @@ function commit(s) {
 
 function hostDispatch(p, a, ackId) {
   let s = structuredClone(state);
-  const ok = reduce(s, p, a);
+  const ok = reduce(s, p, a, { test: !!window.__dvTest });
   if (!ok) {
     if (!ackId) return;
     s = structuredClone(state); // the action was refused – still confirm it so the guest stops re-sending
@@ -70,12 +71,14 @@ function hostDispatch(p, a, ackId) {
 function withContext(a) {
   const gid = state && state.game ? state.game.id : null;
   if (a.k === 'g') return { ...a, gid };
-  if (a.k === 'pick' || a.k === 'menu') return { ...a, from: gid };
+  if (a.k === 'next' || a.k === 'replay' || a.k === 'menu') return { ...a, from: gid };
+  if (a.k === 'newSeries') return { ...a, from: gid, n: state.series.n };
   return a;
 }
 
 function act(a0) {
   const a = withContext(a0);
+  if (DEMO) { const s = structuredClone(state); if (reduce(s, me, a, { test: true })) { s.rev++; state = s; onState(); } return; }
   if (session.role === 'host') { hostDispatch(0, a); return; }
   if (link !== 'linked') { toast('אין חיבור כרגע… מנסה להתחבר שוב'); net && net.wake(); return; }
   const msg = { t: 'act', id: rid(10), a };
@@ -151,6 +154,7 @@ function startNet() {
       hello: () => ({ t: 'hello', token: session.token, name: session.name }),
       onMessage: d => {
         if (d.t === 'state' && d.s) {
+          if (d.s.v !== STATE_V) { versionMismatch(d.s.v); return; }
           if (state && d.s.sid && d.s.sid === state.sid && d.s.rev < state.rev) return; // an older copy that arrived late
           state = d.s;
           store.set('gstate:' + session.code, state);
@@ -164,6 +168,15 @@ function startNet() {
     outboxTimer = setInterval(() => flushOutbox(false), 1000);
   }
   net.start();
+}
+
+/** the two phones run different versions of the site (one of them has an old copy cached) */
+function versionMismatch(v) {
+  log('version-mismatch', `theirs ${v} mine ${STATE_V}`, true);
+  let tried = false;
+  try { tried = sessionStorage.getItem('dv:reloaded') === String(v); sessionStorage.setItem('dv:reloaded', String(v)); } catch { /* ignore */ }
+  if (v > STATE_V && !tried) { location.reload(); return; }
+  toast(v > STATE_V ? 'צריך לרענן את הדף בטלפון הזה כדי לקבל את הגרסה החדשה' : 'בטלפון השני יש גרסה ישנה – צריך לרענן שם את הדף', null, 6000);
 }
 
 const newCode = () => {
@@ -211,48 +224,62 @@ function onState() {
 
 function viewIs(v) { if (v !== lastView) { lastView = v; log('view', v); } }
 
+// The game area is a persistent element: a game keeps its own DOM (scroll position, half-typed input)
+// while the header and banners above it are refreshed.
+const topEl = h('div', { class: 'top-slot' });
+const bodyEl = h('div', { class: 'body-slot' });
+
 function render() {
   if (!session) return;
   if (!state) { viewIs('connecting'); renderConnecting(); return; }
-  viewIs(state.current && state.game ? (state.game.over ? 'over:' : 'game:') + state.current + (state.game.phase ? ':' + state.game.phase : '') : (state.players[1].token ? 'menu' : 'invite'));
+  const inGame = !!(state.current && state.game);
+  viewIs(inGame ? (state.game.over ? 'over:' : 'game:') + state.current + (state.game.phase ? ':' + state.game.phase : '') : (state.players[1].token ? 'menu' : 'invite'));
+  if (topEl.parentNode !== app || bodyEl.parentNode !== app) { bodyEl.replaceChildren(); bodyEl.dataset.gid = ''; app.replaceChildren(topEl, bodyEl); }
   const ctx = ctxFor();
-  const kids = [header(ctx)];
-  let gameRoot = null, G = null;
-  if (state.current && state.game) {
+  const top = [header(ctx)];
+  let G = null;
+  if (inGame) {
     G = BY[state.current];
-    const st = G.status(state.game, ctx);
-    if (link !== 'linked') kids.push(connNote());
-    if (state.game.over) kids.push(resultCard(G, ctx));
-    else kids.push(h('div', { class: 'turn' + (st.mine ? ' mine' : '') }, st.text));
-    gameRoot = h('div', { class: 'game' });
-    kids.push(gameRoot);
-  } else {
-    kids.push(menuView(ctx));
+    if (link !== 'linked') top.push(connNote());
+    if (state.game.over) top.push(resultCard(G, ctx));
+    else { const st = G.status(state.game, ctx); top.push(h('div', { class: 'turn' + (st.mine ? ' mine' : '') }, st.text)); }
   }
   // keep the keyboard open if the player was typing while an update arrived
   const act0 = document.activeElement;
   const fk = act0 && app.contains(act0) && act0.dataset ? act0.dataset.fk : null;
   const sel = fk ? [act0.selectionStart, act0.selectionEnd] : null;
-  app.replaceChildren(...kids);
-  if (gameRoot) G.render(gameRoot, state.game, ctx);
+  topEl.replaceChildren(...top);
+  if (inGame) {
+    if (bodyEl.dataset.gid !== state.game.id) { bodyEl.replaceChildren(); bodyEl.dataset.gid = state.game.id; window.scrollTo(0, 0); }
+    bodyEl.className = 'body-slot game';
+    G.render(bodyEl, state.game, ctx);
+  } else {
+    bodyEl.dataset.gid = '';
+    bodyEl.className = 'body-slot';
+    bodyEl.replaceChildren(menuView(ctx));
+  }
   if (fk) {
     const el = app.querySelector(`[data-fk="${fk}"]`);
-    if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } }
+    if (el && el !== document.activeElement) { el.focus({ preventScroll: true }); try { el.setSelectionRange(sel[0], sel[1]); } catch { /* ignore */ } }
   }
   ensureChatFab();
 }
 
 function header(ctx) {
-  const total = p => Object.values(state.score).reduce((a, x) => a + x[p], 0);
+  const sw = seriesWins(state);
+  const total = p => sw[p];
   const online = link === 'linked';
   const tag = p => h('div', { class: `ptag p${p}${p === me ? ' me' : ''}` },
     p !== me ? h('span', { class: 'dot' + (online ? ' on' : ''), title: online ? 'מחובר' : 'לא מחובר' }) : null,
     h('span', { class: 'pname' }, state.players[p].name || '…'),
     h('span', { class: 'ptot' }, total(p)));
+  const joined = !!state.players[1].token;
   return h('header', { class: 'top' },
-    state.current
-      ? h('button', { class: 'icon-btn', onclick: leaveGame }, '☰ תפריט')
-      : h('div', { class: 'logo' }, 'דף ועיפרון'),
+    h('div', { class: 'top-btns' },
+      state.current
+        ? h('button', { class: 'icon-btn', 'data-log': 'to-table', onclick: leaveGame }, '☰', h('span', { class: 'lbl' }, ' טבלה'))
+        : h('div', { class: 'logo' }, 'דף ועיפרון'),
+      joined ? h('button', { class: 'icon-btn chat-btn', 'data-log': 'chat', onclick: openChat }, '✏️', h('span', { class: 'lbl' }, ' פתק'), unread ? h('span', { class: 'badge' }, unread) : null) : null),
     h('div', { class: 'players' }, tag(0), h('span', { class: 'vs' }, 'נגד'), tag(1)));
 }
 
@@ -335,14 +362,53 @@ async function askLeaveRoom() {
 
 async function leaveGame() {
   if (state.game && !state.game.over) {
-    if (!await confirmBox('לחזור לתפריט באמצע המשחק? (בלי ניקוד)', 'כן, לתפריט', 'להמשיך לשחק')) return;
+    if (!await confirmBox('לעצור ולחזור לטבלה? המשחק הזה יתחיל אחר כך מההתחלה.', 'כן, לטבלה', 'להמשיך לשחק')) return;
   }
   act({ k: 'menu' });
 }
 
-function nextGameId(after) {
-  const i = after ? GAMES.findIndex(G => G.id === after) : -1;
-  return GAMES[(i + 1) % GAMES.length].id;
+async function askNewSeries() {
+  const mid = state.series.results.length > 0 && !seriesDone(state) && seriesDecided(state) == null;
+  if (mid && !await confirmBox('להתחיל סדרה חדשה? הסדרה הנוכחית תיסגר בלי מנצח.', 'כן, סדרה חדשה', 'ביטול')) return;
+  act({ k: 'newSeries' });
+}
+
+async function askReplay() {
+  const G = BY[state.current];
+  if (await confirmBox(`לשחק שוב את "${G.title}"? התוצאה של המשחק הזה תימחק.`, 'כן, משחק חוזר', 'ביטול')) act({ k: 'replay' });
+}
+
+/** "אבא 2 : 1 נועה" in the two pen colours */
+function seriesLine(ctx, big) {
+  const w = seriesWins(state);
+  return h('div', { class: 'series-line' + (big ? ' big' : '') },
+    h('b', { class: 'ink0' }, ctx.names[0]), h('span', { class: 'sc' }, h('b', { class: 'ink0' }, w[0]), h('span', {}, ':'), h('b', { class: 'ink1' }, w[1])), h('b', { class: 'ink1' }, ctx.names[1]),
+    w[2] ? h('small', { class: 'soft' }, ` (תיקו: ${w[2]})`) : null);
+}
+
+/** the headline of a series that is decided / finished, or null */
+function seriesVerdict(ctx) {
+  const dec = seriesDecided(state), done = seriesDone(state);
+  if (dec == null && !done) return null;
+  const w = dec != null ? dec : seriesLeader(state);
+  if (w == null) return { text: 'הסדרה נגמרה בתיקו! 🤝', color: 'var(--pencil)', done, w };
+  const sw = seriesWins(state);
+  const score = `${Math.max(sw[0], sw[1])}:${Math.min(sw[0], sw[1])}`;
+  return { text: (w === me ? `ניצחת את הסדרה ${score}! 🏆` : `${ctx.names[w]} ניצח/ה את הסדרה ${score}! 🏆`), color: `var(--ink${w})`, done, w };
+}
+
+function seriesButtons(inResult) {
+  const done = seriesDone(state), dec = seriesDecided(state);
+  const nx = nextGame(state);
+  const out = [];
+  if (done) out.push(h('button', { class: 'btn marker', 'data-log': 'new-series', onclick: askNewSeries }, 'סדרה חדשה ✏️'));
+  else {
+    const played = state.series.results.length;
+    const label = dec != null ? `ממשיכים בשביל הספורט: ${BY[nx].title} ←` : inResult ? `למשחק הבא: ${BY[nx].title} ←` : `${played ? 'ממשיכים' : 'מתחילים'}: ${BY[nx].title} ←`;
+    out.push(h('button', { class: 'btn marker', 'data-log': 'next:' + nx, disabled: !state.players[1].token, onclick: () => act({ k: 'next' }) }, label));
+    if (dec != null) out.push(h('button', { class: 'btn', 'data-log': 'new-series', onclick: askNewSeries }, 'סדרה חדשה'));
+  }
+  return out;
 }
 
 function resultCard(G, ctx) {
@@ -350,15 +416,22 @@ function resultCard(G, ctx) {
   const title = w == null ? 'תיקו!' : w === me ? 'ניצחת! 🏆' : `נקודה ל${ctx.names[w]}`;
   const color = w == null ? 'var(--pencil)' : `var(--ink${w})`;
   const detail = G.overDetail ? G.overDetail(state.game, ctx) : null;
-  const next = nextGameId(state.current);
+  const inSeries = state.game.sidx >= 0;
+  const verdict = inSeries ? seriesVerdict(ctx) : null;
+  const canReplay = inSeries && state.game.sidx === state.series.results.length - 1;
   return h('div', { class: 'card result' },
     h('div', { class: 'stamp', style: { color } }, title),
     detail ? h('p', {}, detail) : null,
-    h('div', { class: 'row center' },
-      h('button', { class: 'btn marker', onclick: () => act({ k: 'pick', game: next }) }, `למשחק הבא: ${BY[next].title} ←`),
-      h('button', { class: 'btn', onclick: () => act({ k: 'pick', game: state.current }) }, 'עוד סיבוב'),
-      h('button', { class: 'btn ghost small', onclick: () => act({ k: 'menu' }) }, 'לתפריט')));
+    inSeries ? seriesLine(ctx) : null,
+    verdict ? h('div', { class: 'verdict', style: { color: verdict.color } }, verdict.text) : null,
+    verdict && !verdict.done ? h('p', { class: 'soft', style: { margin: '2px 0 8px' } }, 'רוצים להמשיך עד הסוף בשביל הספורט?') : null,
+    h('div', { class: 'row center' }, inSeries ? seriesButtons(true) : null),
+    h('div', { class: 'row center', style: { marginTop: '6px' } },
+      canReplay ? h('button', { class: 'btn ghost small', 'data-log': 'replay', onclick: askReplay }, '↺ משחק חוזר') : null,
+      h('button', { class: 'btn ghost small', 'data-log': 'to-table', onclick: () => act({ k: 'menu' }) }, 'לטבלה')));
 }
+
+const TOGETHER = 'הכי כיף כשיושבים אחד ליד השני – או מדברים בטלפון (על רמקול) תוך כדי המשחק. חצי מהכיף זה הדיבורים 🙂';
 
 function shareUrl() {
   const u = new URL(location.href);
@@ -370,7 +443,7 @@ function shareUrl() {
 
 async function shareInvite() {
   const url = shareUrl();
-  const text = `בוא/י לשחק איתי בדף ועיפרון ✏️ קוד: ${session.code}`;
+  const text = `בוא/י לשחק איתי בדף ועיפרון ✏️ (ותתקשר/י אליי – נדבר תוך כדי!) קוד: ${session.code}`;
   if (navigator.share) {
     try { await navigator.share({ title: 'דף ועיפרון', text, url }); return; } catch { /* cancelled */ }
   }
@@ -388,9 +461,10 @@ function inviteCard() {
       h('li', {}, 'שולחים הזמנה לטלפון השני (כפתור למטה).'),
       h('li', {}, 'בטלפון השני פותחים את הקישור וכותבים שם.'),
       h('li', {}, h('b', {}, 'חוזרים לכאן'), ' – הדף הזה צריך להישאר פתוח על המסך.')),
+    h('div', { class: 'note tip' }, '📞 לא באותו חדר? תתקשרו אחד לשני ושימו על רמקול – ככה זה מרגיש כמו פעם.'),
     h('div', { class: 'row center' },
       h('button', { class: 'btn marker', 'data-log': 'share', onclick: shareInvite }, '📤 שליחת הזמנה'),
-      h('a', { class: 'btn', 'data-log': 'whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent('בוא/י לשחק איתי בדף ועיפרון ✏️ ' + url), target: '_blank', rel: 'noopener' }, 'וואטסאפ')),
+      h('a', { class: 'btn', 'data-log': 'whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent('בוא/י לשחק איתי בדף ועיפרון ✏️ תתקשר/י אליי ונדבר תוך כדי המשחק 📞 ' + url), target: '_blank', rel: 'noopener' }, 'וואטסאפ')),
     h('div', { class: 'wait-line' + (offline ? ' bad' : '') },
       offline ? '⚠️ אין אינטרנט בטלפון הזה – בדקו WiFi / גלישה' : [h('span', { class: 'spin' }), 'מחכים שמישהו יצטרף…']),
     h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, 'משהו לא עובד?'));
@@ -402,37 +476,50 @@ function menuView(ctx) {
   if (!joined) wrap.append(me === 0 ? inviteCard() : connNote());
   else if (link !== 'linked') wrap.append(connNote());
 
-  wrap.append(h('h1', { class: 'title' }, 'הסדרה של הערב'));
-  const next = nextGameId(state.lastDone);
+  const res = state.series.results;
+  const done = seriesDone(state);
+  const verdict = seriesVerdict(ctx);
+  wrap.append(
+    h('h1', { class: 'title' }, `סדרה ${state.series.n}`),
+    h('div', { class: 'center soft', style: { marginTop: '-4px' } }, 'הטוב מחמישה · משחקים לפי הסדר'));
+
   GAMES.forEach((G, i) => {
-    const sc = state.score[G.id];
-    wrap.append(h('button', {
-      class: 'game-row' + (G.id === next && joined ? ' next' : ''),
-      disabled: !joined,
-      onclick: () => act({ k: 'pick', game: G.id }),
-    },
+    const r = res[i];
+    const isNext = !done && i === res.length;
+    let mark;
+    if (r) mark = r.winner == null ? h('span', { class: 'soft' }, 'תיקו') : h('b', { class: 'ink' + r.winner }, '✓ ' + ctx.names[r.winner]);
+    else if (isNext) mark = h('span', { class: 'next-arrow' }, joined ? 'עכשיו ←' : '');
+    else mark = h('span', { class: 'soft' }, '·');
+    wrap.append(h('div', { class: 'game-row' + (r ? ' done' : isNext && joined ? ' next' : ' later') },
       h('span', { class: 'num' }, i + 1),
       h('span', {}, h('b', {}, G.title), h('small', {}, G.sub)),
-      h('span', { class: 'tallies' }, tally(sc[0], 0), tally(sc[1], 1))));
+      h('span', { class: 'row-mark' }, mark)));
   });
 
-  const ties = Object.values(state.score).reduce((a, x) => a + x[2], 0);
-  const t0 = Object.values(state.score).reduce((a, x) => a + x[0], 0);
-  const t1 = Object.values(state.score).reduce((a, x) => a + x[1], 0);
-  wrap.append(h('p', { class: 'center mt' },
-    h('b', { class: 'ink0' }, `${ctx.names[0]}: ${t0}`), '  ·  ',
-    h('b', { class: 'ink1' }, `${ctx.names[1]}: ${t1}`),
-    ties ? h('span', { class: 'soft' }, `  ·  תיקו: ${ties}`) : null));
+  wrap.append(seriesLine(ctx, true));
+  if (verdict) wrap.append(h('div', { class: 'verdict center', style: { color: verdict.color } }, verdict.text));
+  if (verdict && !verdict.done) wrap.append(h('p', { class: 'center soft', style: { margin: '2px 0' } }, 'רוצים להמשיך עד הסוף בשביל הספורט?'));
+  if (joined) wrap.append(h('div', { class: 'row center mt' }, seriesButtons(false)));
+  if (!res.length) wrap.append(h('div', { class: 'note tip' }, '💡 ', TOGETHER));
+
+  const ev = state.evening;
+  if (ev[0] + ev[1] + ev[2] > 0) {
+    wrap.append(h('div', { class: 'card evening' },
+      h('b', {}, 'סדרות הערב'),
+      [0, 1].map(p => h('div', { class: 'ev-row ink' + p }, h('span', {}, ctx.names[p]), tally(ev[p], p))),
+      ev[2] ? h('div', { class: 'soft' }, `סדרות בתיקו: ${ev[2]}`) : null));
+  }
 
   const foot = h('div', { class: 'menu-foot' });
-  if (me === 0 && joined) foot.append(h('button', { class: 'link-btn', onclick: shareInvite }, `קוד הדף: ${session.code}`));
-  foot.append(h('button', {
-    class: 'link-btn', onclick: async () => {
-      if (await confirmBox('למחוק את טבלת הניקוד של הערב ולהתחיל מאפס?', 'כן, דף חדש', 'ביטול')) act({ k: 'resetScores' });
+  if (joined && !done) foot.append(h('button', { class: 'link-btn', 'data-log': 'new-series', onclick: askNewSeries }, 'סדרה חדשה'));
+  if (me === 0 && joined) foot.append(h('button', { class: 'link-btn', 'data-log': 'code', onclick: shareInvite }, `קוד הדף: ${session.code}`));
+  if (ev[0] + ev[1] + ev[2] > 0) foot.append(h('button', {
+    class: 'link-btn', 'data-log': 'reset-evening', onclick: async () => {
+      if (await confirmBox('למחוק את כל הניקוד של הערב ולהתחיל מאפס?', 'כן, מאפס', 'ביטול')) act({ k: 'resetEvening' });
     },
-  }, 'איפוס ניקוד'));
+  }, 'איפוס הערב'));
   if (me === 0 && joined) foot.append(h('button', {
-    class: 'link-btn', onclick: async () => {
+    class: 'link-btn', 'data-log': 'replace-partner', onclick: async () => {
       if (!await confirmBox('לאפשר לטלפון אחר להצטרף במקום השותף הנוכחי?', 'כן', 'ביטול')) return;
       const s = structuredClone(state);
       // the phone that is being replaced may not grab the seat back
@@ -442,7 +529,7 @@ function menuView(ctx) {
       toast('עכשיו טלפון אחר יכול להצטרף עם הקוד ' + session.code);
     },
   }, 'החלפת שותף'));
-  foot.append(h('button', { class: 'link-btn', onclick: askLeaveRoom }, 'יציאה מהדף'));
+  foot.append(h('button', { class: 'link-btn', 'data-log': 'leave', onclick: askLeaveRoom }, 'יציאה מהדף'));
   foot.append(h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, 'משהו לא עובד?'));
   wrap.append(foot);
   return wrap;
@@ -456,21 +543,16 @@ function renderConnecting() {
 
 /* ======================= chat ("passing notes") ======================= */
 
-const QUICK = ['😂', '👏', 'חחח', 'כל הכבוד!', 'לא הוגן!! 😤', 'רגע, חושב…', 'קדימה, תורך!', 'עוד סיבוב?', '❤️'];
-let fab = null, sheetEl = null;
+const QUICK = ['😂', '👏', 'חחח', 'כל הכבוד!', 'לא הוגן!! 😤', 'רגע, חושב…', 'קדימה, תורך!', 'משחק חוזר?', 'תתקשר אליי 📞', '❤️'];
+let sheetEl = null;
 
-function ensureChatFab() {
-  if (!state || !state.players[1].token) { fab && fab.remove(); fab = null; return; }
-  if (!fab) {
-    fab = h('button', { class: 'fab', onclick: openChat });
-    document.body.append(fab);
-  }
-  fab.replaceChildren(...['✏️ פתק', unread ? h('span', { class: 'badge' }, unread) : null].filter(Boolean));
-}
+// the chat button lives in the top bar (a floating button used to cover keys on small phones)
+function ensureChatFab() { /* kept for callers: the header is re-rendered instead */ }
 
 function openChat() {
+  if (chatOpen) return;
   chatOpen = true; unread = 0;
-  ensureChatFab();
+  render();
   const bg = h('div', { class: 'sheet-bg', onclick: closeChat });
   const input = h('input', { class: 'paper', placeholder: 'לכתוב פתק…', maxlength: 240, enterkeyhint: 'send' });
   const send = text => { if (text.trim()) act({ k: 'chat', text }); };
@@ -492,7 +574,6 @@ function openChat() {
 function closeChat() {
   chatOpen = false;
   if (sheetEl) { sheetEl._bg.remove(); sheetEl.remove(); sheetEl = null; }
-  ensureChatFab();
 }
 
 function renderChat() {
@@ -508,7 +589,6 @@ function renderChat() {
 /* ======================= home / join ======================= */
 
 function homeView(room) {
-  if (fab) { fab.remove(); fab = null; }
   const nameIn = h('input', { class: 'paper', placeholder: 'השם שלי', maxlength: 14, value: store.get('name', '') });
   const codeIn = h('input', { class: 'paper code', placeholder: '____', inputmode: 'numeric', maxlength: 4, value: room || '' });
   const getName = () => {
@@ -529,6 +609,7 @@ function homeView(room) {
     h('h1', { class: 'center', style: { fontSize: '64px', marginTop: '22px' } }, 'דף ועיפרון'),
     doodle,
     h('p', { class: 'center soft' }, 'כל אחד עם הטלפון שלו – כמו הדף שהיה לכל אחד מול העיניים.'),
+    h('div', { class: 'note tip' }, '💡 ', TOGETHER),
     h('div', { class: 'card stack' }, h('label', {}, 'איך קוראים לך?'), nameIn),
   ];
   if (room) {
@@ -549,7 +630,7 @@ function homeView(room) {
       h('ol', { class: 'help' },
         h('li', {}, 'אחד פותח דף חדש ומקבל קוד של 4 ספרות.'),
         h('li', {}, 'השני מצטרף עם הקישור או עם הקוד.'),
-        h('li', {}, 'משחקים – כל אחד בטלפון שלו, והכול מסתנכרן.'))),
+        h('li', {}, 'משחקים סדרה של חמישה משחקים – הטוב מחמישה מנצח.'))),
     h('p', { class: 'center soft', style: { fontSize: '12px' } }, `גרסה ${VERSION} · האתר שולח נתוני חיבור טכניים אנונימיים כדי לאתר תקלות (בלי שמות ובלי תוכן המשחק).`));
   viewIs(room ? 'join' : 'home');
   app.replaceChildren(...kids.filter(Boolean));
@@ -613,12 +694,29 @@ document.addEventListener('visibilitychange', () => {
 /* ======================= boot ======================= */
 
 async function boot() {
+  if (DEMO) {
+    const { demoState } = await import('./demo.js');
+    me = params.get('me') === '1' ? 1 : 0;
+    session = { role: me === 0 ? 'host' : 'guest', code: '4821', token: 't' + me, name: 'demo' };
+    const d = demoState(params.get('demo'));
+    if (d.home) { session = null; homeView(d.room || null); return; }
+    state = d.state; link = d.link || 'linked';
+    onState();
+    return;
+  }
   await claimPrimaryTab();
   session = store.get('session', null);
   const room = (params.get('room') || '').replace(/\D/g, '').slice(0, 4);
   if (session && (!room || room === session.code)) {
     if (session.role === 'host') {
       state = store.get('state:' + session.code, null) || newState(session.name, session.token);
+      if (state.v !== STATE_V) {
+        // saved by an older version of the site: keep the people, start the scoring fresh
+        const old = state;
+        state = newState(session.name, session.token);
+        state.players = old.players; state.sid = old.sid || state.sid; state.chat = old.chat || []; state.banned = old.banned;
+        state.rev = (old.rev || 0) + 1;
+      }
       if (!state.acks) state.acks = [];
       if (!state.sid) state.sid = rid(10);
       if (session.fresh) { session.fresh = false; store.set('session', session); }
@@ -633,5 +731,5 @@ async function boot() {
   homeView(room || null);
 }
 // small handle for automated tests / debugging in the console
-window.__dv = { get net() { return net; }, get state() { return state; }, get link() { return link; }, get session() { return session; }, get outbox() { return outbox; }, get log() { return logRing; } };
+window.__dv = { get net() { return net; }, get state() { return state; }, get link() { return link; }, get session() { return session; }, get outbox() { return outbox; }, get log() { return logRing; }, act };
 boot();

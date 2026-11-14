@@ -1,13 +1,14 @@
-import { h, s, markX, markO, INK } from '../ui.js';
+import { h, s, markX, markO, roughLine, INK } from '../ui.js';
+import { log } from '../log.js';
 
 const N = 21;      // a big sheet of squared paper
 const U = 30;      // drawing units per square
 const DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
 
+// The board element lives as long as the game does: taps only redraw the marks, so the sheet never
+// jumps or loses its scroll position under the finger.
 let ui = { id: null };
-function sync(g) {
-  if (ui.id !== g.id) ui = { id: g.id, sel: null, cell: ui.cell || 30, scroll: null, seenLast: null };
-}
+let dom = null;
 
 export default {
   id: 'five',
@@ -56,93 +57,120 @@ export default {
   },
 
   render(root, g, ctx) {
-    sync(g);
-    const { me, send } = ctx;
-    const myTurn = g.turn === me && !g.over;
-    const rerender = () => { root.replaceChildren(); this.render(root, g, ctx); };
-    if (ui.sel != null && g.cells[ui.sel] !== -1) ui.sel = null;
-
-    const cell = ui.cell;
-    const wrap = h('div', { class: 'five-wrap' });
-    const boardPx = N * cell;
-    const boardEl = h('div', {
-      class: 'five-board',
-      style: {
-        width: boardPx + 'px', height: boardPx + 'px',
-        backgroundImage: 'linear-gradient(rgba(70,120,190,.38) 1px, transparent 1px), linear-gradient(90deg, rgba(70,120,190,.38) 1px, transparent 1px)',
-        backgroundSize: `${cell}px ${cell}px`,
-        backgroundColor: 'rgba(255,255,255,.4)',
-      },
-    });
-    const svg = s('svg', { viewBox: `0 0 ${N * U} ${N * U}` });
-    const center = i => [(i % N) * U + U / 2, Math.floor(i / N) * U + U / 2];
-    const mark = (i, p, op = 1) => {
-      const [x, y] = center(i);
-      const m = p === 0 ? markX(x, y, U * .3, INK[0], 3.2) : markO(x, y, U * .33, INK[1], 3.2);
-      if (op < 1) m.setAttribute('opacity', op);
-      return m;
-    };
-    if (g.last != null) {
-      const [x, y] = center(g.last);
-      svg.append(s('rect', { x: x - U / 2 + 2, y: y - U / 2 + 2, width: U - 4, height: U - 4, fill: '#fff09a', opacity: .9, rx: 3 }));
-    }
-    g.cells.forEach((p, i) => { if (p >= 0) svg.append(mark(i, p)); });
-    if (ui.sel != null && myTurn) {
-      const [x, y] = center(ui.sel);
-      svg.append(s('rect', { x: x - U / 2 + 1, y: y - U / 2 + 1, width: U - 2, height: U - 2, fill: 'none', stroke: INK[me], 'stroke-width': 2, 'stroke-dasharray': '4 3' }));
-      svg.append(mark(ui.sel, me, .4));
-    }
-    if (g.line) {
-      const [x1, y1] = center(g.line[0]), [x2, y2] = center(g.line[1]);
-      const dx = Math.sign(x2 - x1) * U * .45, dy = Math.sign(y2 - y1) * U * .45;
-      svg.append(s('path', { d: `M${x1 - dx} ${y1 - dy} L${x2 + dx} ${y2 + dy}`, stroke: '#3b3a36', 'stroke-width': 4, 'stroke-linecap': 'round', filter: 'url(#rough)', opacity: .8 }));
-    }
-    boardEl.append(svg);
-    boardEl.addEventListener('click', e => {
-      if (!myTurn) return;
-      const rect = boardEl.getBoundingClientRect();
-      const c = Math.floor((e.clientX - rect.left) / cell), r = Math.floor((e.clientY - rect.top) / cell);
-      if (r < 0 || r >= N || c < 0 || c >= N) return;
-      const i = r * N + c;
-      if (g.cells[i] !== -1) return;
-      if (ui.sel === i) { ui.sel = null; send({ k: 'put', i }); return; }
-      ui.sel = i; rerender();
-    });
-    wrap.append(boardEl);
-    wrap.addEventListener('scroll', () => { ui.scroll = [wrap.scrollLeft, wrap.scrollTop]; }, { passive: true });
-
-    root.append(
-      h('div', { class: 'row', style: { justifyContent: 'space-between' } },
-        h('span', {}, h('b', { class: 'ink0' }, '✕ ' + ctx.names[0]), '  ', h('b', { class: 'ink1' }, '◯ ' + ctx.names[1])),
-        h('div', { class: 'zoom' },
-          h('button', { class: 'btn small', onclick: () => { ui.cell = Math.max(20, ui.cell - 4); ui.scroll = null; rerender(); } }, '−'),
-          h('button', { class: 'btn small', onclick: () => { ui.cell = Math.min(46, ui.cell + 4); ui.scroll = null; rerender(); } }, '+'))),
-      wrap);
-    if (myTurn) {
-      root.append(h('div', { class: 'center' }, h('button', {
-        class: 'btn marker', disabled: ui.sel == null,
-        onclick: () => { const i = ui.sel; ui.sel = null; send({ k: 'put', i }); },
-      }, ui.sel == null ? 'לוחצים על משבצת' : 'לסמן כאן ✓ (או לחיצה נוספת)')));
-    }
-
-    // keep the scroll position between updates; start in the middle of the sheet
-    const focus = ui.scroll ? null : (g.last != null ? g.last : Math.floor(N * N / 2));
-    const newMove = g.last != null && g.last !== ui.seenLast;
-    ui.seenLast = g.last;
-    requestAnimationFrame(() => {
-      if (ui.scroll) {
-        wrap.scrollLeft = ui.scroll[0]; wrap.scrollTop = ui.scroll[1];
-        if (!newMove) return;
-        // a new mark that is outside the visible part of the sheet: slide over to it
-        const x = (g.last % N + .5) * cell, y = (Math.floor(g.last / N) + .5) * cell;
-        const seen = x > wrap.scrollLeft + cell / 2 && x < wrap.scrollLeft + wrap.clientWidth - cell / 2
-          && y > wrap.scrollTop + cell / 2 && y < wrap.scrollTop + wrap.clientHeight - cell / 2;
-        if (!seen) wrap.scrollTo({ left: x - wrap.clientWidth / 2, top: y - wrap.clientHeight / 2, behavior: 'smooth' });
-        return;
-      }
-      const [x, y] = [(focus % N + .5) * cell, (Math.floor(focus / N) + .5) * cell];
-      wrap.scrollLeft = x - wrap.clientWidth / 2;
-      wrap.scrollTop = y - wrap.clientHeight / 2;
-    });
+    if (ui.id !== g.id) ui = { id: g.id, sel: null, cell: ui.cell || 30, seenLast: undefined };
+    if (!dom || dom.id !== g.id || dom.root !== root || !root.contains(dom.wrap)) dom = build(root, g.id);
+    dom.g = g; dom.ctx = ctx;
+    paint();
   },
 };
+
+function build(root, id) {
+  root.replaceChildren();
+  const d = { id, root };
+  d.svg = s('svg', { viewBox: `0 0 ${N * U} ${N * U}` });
+  d.board = h('div', { class: 'five-board' }, d.svg);
+  d.wrap = h('div', { class: 'five-wrap' }, d.board);
+  d.names = h('span', {});
+  d.confirm = h('button', { class: 'btn marker', 'data-log': 'five-confirm', onclick: () => { if (ui.sel != null) place(ui.sel); } });
+  d.confirmRow = h('div', { class: 'center' }, d.confirm);
+  const zoom = by => {
+    const w = d.wrap, old = ui.cell;
+    const cx = (w.scrollLeft + w.clientWidth / 2) / old, cy = (w.scrollTop + w.clientHeight / 2) / old;
+    ui.cell = Math.max(20, Math.min(46, ui.cell + by));
+    paint();
+    w.scrollLeft = cx * ui.cell - w.clientWidth / 2; w.scrollTop = cy * ui.cell - w.clientHeight / 2;
+  };
+  root.append(
+    h('div', { class: 'row', style: { justifyContent: 'space-between' } },
+      d.names,
+      h('div', { class: 'zoom' },
+        h('button', { class: 'btn small', 'data-log': 'zoom-out', onclick: () => zoom(-4) }, '−'),
+        h('button', { class: 'btn small', 'data-log': 'zoom-in', onclick: () => zoom(4) }, '+'))),
+    d.wrap, d.confirmRow);
+
+  d.board.addEventListener('click', e => {
+    const g = d.g, ctx = d.ctx;
+    if (!g || g.over || g.turn !== ctx.me) return;
+    // measure the sheet as it is really drawn on this screen
+    const rect = d.board.getBoundingClientRect();
+    const cell = rect.width / N;
+    const c = Math.floor((e.clientX - rect.left) / cell), r = Math.floor((e.clientY - rect.top) / cell);
+    log('five-tap', { r, c, cell: +cell.toFixed(2), set: ui.cell, x: Math.round(e.clientX - rect.left), y: Math.round(e.clientY - rect.top), dpr: window.devicePixelRatio, vv: window.visualViewport ? +window.visualViewport.scale.toFixed(2) : 1 });
+    if (r < 0 || r >= N || c < 0 || c >= N) return;
+    const i = r * N + c;
+    if (g.cells[i] !== -1) return;
+    if (ui.sel === i) { place(i); return; }
+    ui.sel = i;
+    paint();
+  });
+  return d;
+}
+
+function place(i) {
+  ui.sel = null;
+  dom.ctx.send({ k: 'put', i });
+  paint();
+}
+
+function paint() {
+  const d = dom, g = d.g, ctx = d.ctx, me = ctx.me;
+  const myTurn = g.turn === me && !g.over;
+  if (ui.sel != null && (g.cells[ui.sel] !== -1 || !myTurn)) ui.sel = null;
+  const cell = ui.cell, px = N * cell;
+  Object.assign(d.board.style, {
+    width: px + 'px', height: px + 'px',
+    backgroundImage: 'linear-gradient(rgba(70,120,190,.38) 1px, transparent 1px), linear-gradient(90deg, rgba(70,120,190,.38) 1px, transparent 1px)',
+    backgroundSize: `${cell}px ${cell}px`,
+    backgroundColor: 'rgba(255,255,255,.4)',
+  });
+  d.svg.setAttribute('width', px); d.svg.setAttribute('height', px);
+
+  const center = i => [(i % N) * U + U / 2, Math.floor(i / N) * U + U / 2];
+  const mark = (i, p, op) => {
+    const [x, y] = center(i);
+    const m = p === 0 ? markX(x, y, U * .3, INK[0], 3.2) : markO(x, y, U * .33, INK[1], 3.2);
+    if (op) m.setAttribute('opacity', op);
+    return m;
+  };
+  const kids = [];
+  if (g.last != null) {
+    const [x, y] = center(g.last);
+    kids.push(s('rect', { x: x - U / 2 + 2, y: y - U / 2 + 2, width: U - 4, height: U - 4, fill: '#fff09a', opacity: .9, rx: 3 }));
+  }
+  if (ui.sel != null) {
+    const [x, y] = center(ui.sel);
+    kids.push(s('rect', { x: x - U / 2 + 1, y: y - U / 2 + 1, width: U - 2, height: U - 2, fill: INK[me], 'fill-opacity': .12, stroke: INK[me], 'stroke-width': 2.5, 'stroke-dasharray': '4 3', class: 'five-sel' }));
+  }
+  g.cells.forEach((p, i) => { if (p >= 0) kids.push(mark(i, p)); });
+  if (ui.sel != null) kids.push(mark(ui.sel, me, .55));
+  if (g.line) {
+    const [x1, y1] = center(g.line[0]), [x2, y2] = center(g.line[1]);
+    const dx = Math.sign(x2 - x1) * U * .45, dy = Math.sign(y2 - y1) * U * .45;
+    kids.push(roughLine(x1 - dx, y1 - dy, x2 + dx, y2 + dy, { stroke: '#3b3a36', 'stroke-width': 4, opacity: .8 }, 1.5));
+  }
+  d.svg.replaceChildren(...kids);
+
+  d.names.replaceChildren(h('b', { class: 'ink0' }, '✕ ' + ctx.names[0]), '  ', h('b', { class: 'ink1' }, '◯ ' + ctx.names[1]));
+  d.confirmRow.style.display = myTurn ? '' : 'none';
+  d.confirm.disabled = ui.sel == null;
+  d.confirm.textContent = ui.sel == null ? 'לוחצים על משבצת' : 'לסמן כאן ✓ (או לחיצה נוספת)';
+
+  // first paint: open the sheet on the action; later: slide to a new mark that is out of sight
+  const first = ui.seenLast === undefined;
+  const newMove = g.last != null && g.last !== ui.seenLast;
+  ui.seenLast = g.last;
+  if (first || newMove) {
+    const focus = g.last != null ? g.last : Math.floor(N * N / 2);
+    requestAnimationFrame(() => {
+      const w = d.wrap;
+      const x = (focus % N + .5) * cell, y = (Math.floor(focus / N) + .5) * cell;
+      if (first) { w.scrollLeft = x - w.clientWidth / 2; w.scrollTop = y - w.clientHeight / 2; return; }
+      const seen = x > w.scrollLeft + cell / 2 && x < w.scrollLeft + w.clientWidth - cell / 2
+        && y > w.scrollTop + cell / 2 && y < w.scrollTop + w.clientHeight - cell / 2;
+      if (!seen) {
+        try { w.scrollTo({ left: x - w.clientWidth / 2, top: y - w.clientHeight / 2, behavior: 'smooth' }); }
+        catch { w.scrollLeft = x - w.clientWidth / 2; w.scrollTop = y - w.clientHeight / 2; }
+      }
+    });
+  }
+}
