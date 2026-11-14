@@ -54,7 +54,11 @@ export function confirmBox(text, yes = 'כן', no = 'ביטול') {
 }
 
 export function buzz(pattern = 40) {
-  try { navigator.vibrate && navigator.vibrate(pattern); } catch { /* ignore */ }
+  try {
+    // browsers refuse to vibrate before the first tap on the page
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+    navigator.vibrate && navigator.vibrate(pattern);
+  } catch { /* ignore */ }
 }
 
 /** Tally marks in groups of five, like on the scoring page. */

@@ -317,3 +317,22 @@ table.paper tr.win td { background: var(--marker); }
 .center { text-align: center; }
 .mt { margin-top: 14px; }
 .pencil-line { border: 0; height: 2px; background: var(--pencil-soft); opacity: .5; border-radius: 50%; margin: 16px 0; }
+
+/* ---------- connection help ---------- */
+.conn { transform: none; text-align: right; font-family: var(--font); }
+a.btn { color: inherit; text-decoration: none; }
+.conn-title { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+.conn-line { font-family: var(--font); font-size: 15px; margin-top: 4px; }
+.conn-actions { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 8px; }
+.spin {
+  width: 16px; height: 16px; flex: none; display: inline-block;
+  border: 2.5px solid var(--pencil-soft); border-top-color: transparent; border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+ol.help { text-align: right; margin: 8px 0; padding-right: 22px; font-size: 15px; line-height: 1.5; }
+.wait-line { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; color: var(--pencil-soft); }
+.wait-line.bad { color: var(--ink1); font-weight: 700; }
+.tech { text-align: right; max-height: 86vh; overflow: auto; }
+.tech-box { font-size: 13px; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px; margin: 8px 0; direction: rtl; line-height: 1.6; }
+.tech-log { font-size: 10px; direction: ltr; text-align: left; white-space: pre-wrap; word-break: break-all; color: var(--pencil-soft); max-height: 150px; overflow: auto; margin: 10px 0 0; }

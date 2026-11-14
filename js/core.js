@@ -13,7 +13,7 @@ export const cleanName = n => String(n || '').trim().slice(0, 14) || 'שחקן';
 
 export function newState(name, token) {
   return {
-    v: 1, rev: 0,
+    v: 1, rev: 0, sid: rid(10),
     players: [{ name, token }, { name: null, token: null }],
     score: Object.fromEntries(GAMES.map(G => [G.id, [0, 0, 0]])), // [wins p0, wins p1, ties]
     starter: Object.fromEntries(GAMES.map(G => [G.id, 0])),

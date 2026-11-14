@@ -1,5 +1,6 @@
 import { h, toast, confirmBox, tally, buzz, rid } from './ui.js';
-import { HostNet, GuestNet, LOCAL } from './net.js';
+import { Link, LOCAL } from './net.js';
+import { log, flush as flushLog, setLogContext, dev as logDev, ring as logRing, VERSION } from './log.js';
 import { GAMES, BY, cleanName, newState, reduce } from './core.js';
 
 const params = new URLSearchParams(location.search);
@@ -40,6 +41,9 @@ let chatOpen = false;
 let unread = 0;
 let outbox = [];        // guest: actions sent but not yet confirmed by the host
 let outboxTimer = null;
+let loggedOver = null;
+let lastView = null;
+let techOpen = false;
 
 /* ======================= dispatching actions ======================= */
 
@@ -99,23 +103,34 @@ function startNet() {
   me = session.role === 'host' ? 0 : 1;
   outbox = [];
   clearInterval(outboxTimer);
+  setLogContext(`${session.role} ${session.code}`);
+  const onStatus = st => {
+    const was = link;
+    link = st;
+    if (st === 'linked' && session.role === 'guest') flushOutbox(true);
+    if (st === 'linked' && was !== 'linked' && state && state.players[1].token) buzz(30);
+    render();
+  };
   if (session.role === 'host') {
-    net = new HostNet(session.code, {
-      accept: d => !!d.token && (!state.players[1].token || state.players[1].token === d.token),
+    net = new Link('host', session.code, {
+      roomId: () => state.sid,
+      guestToken: () => state.players[1].token,
+      accept: d => !!d.token && !(state.banned || []).includes(d.token) && (!state.players[1].token || state.players[1].token === d.token),
       onHello: d => {
         const s = structuredClone(state);
         const first = !s.players[1].token;
         s.players[1] = { name: cleanName(d.name), token: d.token };
         commit(s);
-        if (first) toast(`${s.players[1].name} הצטרף/ה לדף! ✏️`);
+        if (first) { toast(`${s.players[1].name} הצטרף/ה לדף! ✏️`); buzz([40, 60, 40]); }
       },
       onMessage: d => {
         if (d.t !== 'act') return;
         if (d.id && (state.acks || []).includes(d.id)) { net.send({ t: 'state', s: state }); return; } // duplicate
         hostDispatch(1, d.a, d.id);
       },
-      onStatus: st => { link = st; render(); },
+      onStatus,
       // the 4-digit code is already used by somebody else right now – quietly take another one
+      isFresh: () => !!session.fresh && !state.players[1].token,
       onIdTaken: () => {
         if (!session.fresh || state.players[1].token) return false;
         const old = session.code;
@@ -128,13 +143,15 @@ function startNet() {
         render();
         return true;
       },
-      onOpen: () => { if (session.fresh) { session.fresh = false; store.set('session', session); } },
     });
+    if (session.fresh) setTimeout(() => { if (session && session.fresh) { session.fresh = false; store.set('session', session); } }, 8000);
   } else {
-    net = new GuestNet(session.code, {
+    net = new Link('guest', session.code, {
+      roomId: () => (state ? state.sid : null),
       hello: () => ({ t: 'hello', token: session.token, name: session.name }),
       onMessage: d => {
         if (d.t === 'state' && d.s) {
+          if (state && d.s.sid && d.s.sid === state.sid && d.s.rev < state.rev) return; // an older copy that arrived late
           state = d.s;
           store.set('gstate:' + session.code, state);
           const acks = state.acks || [];
@@ -142,7 +159,7 @@ function startNet() {
           onState();
         }
       },
-      onStatus: st => { link = st; if (st === 'linked') flushOutbox(true); render(); },
+      onStatus,
     });
     outboxTimer = setInterval(() => flushOutbox(false), 1000);
   }
@@ -177,6 +194,8 @@ function onState() {
   if (prevGameKey !== undefined && prevGameKey !== null && key === null && state.leftBy !== me) {
     toast(`${state.players[1 - me].name} חזר/ה לתפריט`);
   }
+  if (key !== prevGameKey && key) log('game-start', state.current);
+  if (state.game && state.game.over && loggedOver !== key) { loggedOver = key; log('game-over', `${state.current} ${state.game.over.winner === null ? 'tie' : state.game.over.winner === me ? 'me' : 'other'}`); }
   prevGameKey = key;
   // my turn?
   let mine = false;
@@ -190,9 +209,12 @@ function onState() {
 
 /* ======================= rendering ======================= */
 
+function viewIs(v) { if (v !== lastView) { lastView = v; log('view', v); } }
+
 function render() {
   if (!session) return;
-  if (!state) { renderConnecting(); return; }
+  if (!state) { viewIs('connecting'); renderConnecting(); return; }
+  viewIs(state.current && state.game ? (state.game.over ? 'over:' : 'game:') + state.current + (state.game.phase ? ':' + state.game.phase : '') : (state.players[1].token ? 'menu' : 'invite'));
   const ctx = ctxFor();
   const kids = [header(ctx)];
   let gameRoot = null, G = null;
@@ -235,17 +257,76 @@ function header(ctx) {
 }
 
 function connNote() {
-  const other = (state && state.players[1 - me].name) || 'השותף';
-  const msg = {
-    waiting: me === 0 ? `מחכים ש${other} יתחבר/תתחבר…` : 'מתחבר…',
-    'no-host': `לא מוצא את הדף של ${other}. האם המסך שלו/ה פתוח?`,
-    offline: 'אין אינטרנט כרגע, מנסה שוב…',
-    full: 'בדף הזה כבר משחקים שניים 🙁 (המארח יכול ללחוץ "החלפת שותף")',
-  }[link] || 'מתחבר…';
-  return h('div', { class: 'note warn' }, '📡 ', msg,
-    h('div', {},
-      link === 'full' ? h('button', { class: 'link-btn', onclick: () => net && net.wake() }, 'לנסות שוב') : null,
-      state ? h('button', { class: 'link-btn', onclick: askLeaveRoom }, 'יציאה מהדף') : null));
+  const joined = !!(state && state.players[1].token);
+  const other = (state && state.players[1 - me].name) || (me === 0 ? 'השותף' : 'המארח');
+  const code = session.code;
+  let title, lines = [], busy = false, retry = false;
+  if (link === 'offline') {
+    title = 'אין אינטרנט בטלפון הזה';
+    lines = ['בדקו שה-WiFi או הגלישה פועלים.', 'ממשיכים לנסות לבד – אין צורך לרענן.'];
+    busy = true; retry = true;
+  } else if (link === 'full') {
+    title = 'בדף הזה כבר משחקים שניים';
+    lines = ['החלפתם טלפון? אצל מי שפתח את הדף: בתפריט לוחצים "החלפת שותף", ואז כאן "לנסות שוב".'];
+    retry = true;
+  } else if (me === 0) {
+    title = joined ? `מחכים ש${other} יחזור/תחזור…` : 'מחכים שמישהו יצטרף…';
+    lines = joined
+      ? ['המשחק שמור ולא הולך לאיבוד.', `אצל ${other}: פותחים שוב את המשחק (אותו קישור) והוא ממשיך מאותה נקודה.`]
+      : [`הקוד של הדף: ${code}`];
+    busy = true;
+  } else if (link === 'no-host') {
+    title = `הדף של ${other} לא עונה`;
+    lines = [`1. אצל ${other}: המשחק פתוח על המסך? (לא ברקע, לא נעול)`, `2. הקוד נכון? נכנסתם לדף ${code}`, '3. לשני הטלפונים יש אינטרנט?', 'ברגע שהדף השני יתעורר – מתחברים לבד.'];
+    busy = true; retry = true;
+  } else {
+    title = state ? `החיבור ל${other} נפל – מתחברים מחדש…` : `מתחברים לדף ${code}…`;
+    lines = [state ? 'המשחק שמור. אין צורך לעשות כלום.' : 'זה לוקח כמה שניות.'];
+    busy = true;
+  }
+  return h('div', { class: 'note warn conn' },
+    h('div', { class: 'conn-title' }, busy ? h('span', { class: 'spin' }) : '⚠️ ', title),
+    lines.map(l => h('div', { class: 'conn-line' }, l)),
+    h('div', { class: 'conn-actions' },
+      retry ? h('button', { class: 'btn small marker', 'data-log': 'retry', onclick: () => { net && net.wake(); toast('מנסה שוב…'); } }, 'לנסות שוב') : null,
+      h('button', { class: 'link-btn', 'data-log': 'leave', onclick: () => (state ? askLeaveRoom() : leaveRoom()) }, state ? 'יציאה מהדף' : 'ביטול'),
+      h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, 'משהו לא עובד?')));
+}
+
+/** "something is wrong" sheet: plain-language checklist + technical details + send a report */
+function showTech() {
+  if (techOpen) return;
+  techOpen = true;
+  const info = net ? net.info() : { channels: [], status: '-' };
+  const relays = info.channels.filter(c => c.name.startsWith('relay'));
+  const up = relays.filter(c => c.open).length;
+  const bg = h('div', { class: 'modal-bg' });
+  const close = () => { techOpen = false; bg.remove(); };
+  bg.addEventListener('click', e => { if (e.target === bg) close(); });
+  bg.append(h('div', { class: 'modal card tech' },
+    h('h3', {}, 'משהו לא עובד?'),
+    h('ol', { class: 'help' },
+      h('li', {}, 'שני הטלפונים צריכים להיות עם המשחק פתוח על המסך.'),
+      h('li', {}, 'בודקים שיש אינטרנט בשניהם (אפשר לנסות לכבות ולהדליק WiFi).'),
+      h('li', {}, 'לוחצים "לנסות שוב", ואם לא עוזר – מרעננים את הדף. המשחק שמור.')),
+    h('div', { class: 'tech-box' },
+      h('div', {}, `מזהה מכשיר: `, h('b', {}, logDev), ` · גרסה ${VERSION}`),
+      h('div', {}, `מצב: ${info.status} · שרתי תיווך: ${up}/${relays.length}`),
+      h('div', {}, info.channels.map(c => `${c.open ? '✓' : '✗'} ${c.name.replace('relay:', '')}`).join('  ')),
+      h('div', {}, `אינטרנט: ${navigator.onLine ? 'יש' : 'אין'}`)),
+    h('div', { class: 'row center' },
+      h('button', {
+        class: 'btn marker small', 'data-log': 'send-report', onclick: async e => {
+          e.target.disabled = true;
+          log('report', net ? net.info() : null, true);
+          const ok = await flushLog(true);
+          toast(ok ? `הדיווח נשלח ✓ (מזהה ${logDev})` : 'לא הצלחתי לשלוח – אין אינטרנט?');
+          e.target.disabled = false;
+        },
+      }, 'שליחת דיווח תקלה'),
+      h('button', { class: 'btn ghost small', onclick: close }, 'סגירה')),
+    h('pre', { class: 'tech-log' }, logRing.slice(-14).join('\n'))));
+  document.body.append(bg);
 }
 
 async function askLeaveRoom() {
@@ -298,14 +379,21 @@ async function shareInvite() {
 
 function inviteCard() {
   const url = shareUrl();
+  const offline = link === 'offline';
   return h('div', { class: 'card center' },
     h('h3', {}, 'מזמינים שותף לדף'),
     h('div', {}, 'הקוד של הדף:'),
     h('div', { class: 'code-big' }, session.code),
-    h('p', { class: 'soft' }, 'בטלפון השני: פותחים את הקישור, או נכנסים לאתר ומקלידים את הקוד.'),
+    h('ol', { class: 'help' },
+      h('li', {}, 'שולחים הזמנה לטלפון השני (כפתור למטה).'),
+      h('li', {}, 'בטלפון השני פותחים את הקישור וכותבים שם.'),
+      h('li', {}, h('b', {}, 'חוזרים לכאן'), ' – הדף הזה צריך להישאר פתוח על המסך.')),
     h('div', { class: 'row center' },
-      h('button', { class: 'btn marker', onclick: shareInvite }, '📤 שליחת הזמנה'),
-      h('a', { class: 'btn', href: 'https://wa.me/?text=' + encodeURIComponent('בוא/י לשחק איתי ✏️ ' + url), target: '_blank', rel: 'noopener' }, 'וואטסאפ')));
+      h('button', { class: 'btn marker', 'data-log': 'share', onclick: shareInvite }, '📤 שליחת הזמנה'),
+      h('a', { class: 'btn', 'data-log': 'whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent('בוא/י לשחק איתי בדף ועיפרון ✏️ ' + url), target: '_blank', rel: 'noopener' }, 'וואטסאפ')),
+    h('div', { class: 'wait-line' + (offline ? ' bad' : '') },
+      offline ? '⚠️ אין אינטרנט בטלפון הזה – בדקו WiFi / גלישה' : [h('span', { class: 'spin' }), 'מחכים שמישהו יצטרף…']),
+    h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, 'משהו לא עובד?'));
 }
 
 function menuView(ctx) {
@@ -346,10 +434,16 @@ function menuView(ctx) {
   if (me === 0 && joined) foot.append(h('button', {
     class: 'link-btn', onclick: async () => {
       if (!await confirmBox('לאפשר לטלפון אחר להצטרף במקום השותף הנוכחי?', 'כן', 'ביטול')) return;
-      const s = structuredClone(state); s.players[1].token = null; commit(s);
+      const s = structuredClone(state);
+      // the phone that is being replaced may not grab the seat back
+      s.banned = [...(s.banned || []), s.players[1].token].filter(Boolean).slice(-6);
+      s.players[1].token = null;
+      commit(s);
+      toast('עכשיו טלפון אחר יכול להצטרף עם הקוד ' + session.code);
     },
   }, 'החלפת שותף'));
   foot.append(h('button', { class: 'link-btn', onclick: askLeaveRoom }, 'יציאה מהדף'));
+  foot.append(h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, 'משהו לא עובד?'));
   wrap.append(foot);
   return wrap;
 }
@@ -357,10 +451,7 @@ function menuView(ctx) {
 function renderConnecting() {
   app.replaceChildren(
     h('header', { class: 'top' }, h('div', { class: 'logo' }, 'דף ועיפרון')),
-    h('div', { class: 'card center' },
-      h('h2', {}, 'מתחברים לדף ' + session.code),
-      connNote(),
-      h('button', { class: 'link-btn', onclick: leaveRoom }, 'ביטול')));
+    connNote());
 }
 
 /* ======================= chat ("passing notes") ======================= */
@@ -452,7 +543,16 @@ function homeView(room) {
       h('div', { class: 'card stack' }, h('label', {}, 'יש לי קוד מהטלפון השני:'), codeIn,
         h('button', { class: 'btn', onclick: join }, 'הצטרפות')));
   }
-  app.replaceChildren(...kids);
+  kids.push(
+    room ? null : h('div', { class: 'card' },
+      h('b', {}, 'איך זה עובד?'),
+      h('ol', { class: 'help' },
+        h('li', {}, 'אחד פותח דף חדש ומקבל קוד של 4 ספרות.'),
+        h('li', {}, 'השני מצטרף עם הקישור או עם הקוד.'),
+        h('li', {}, 'משחקים – כל אחד בטלפון שלו, והכול מסתנכרן.'))),
+    h('p', { class: 'center soft', style: { fontSize: '12px' } }, `גרסה ${VERSION} · האתר שולח נתוני חיבור טכניים אנונימיים כדי לאתר תקלות (בלי שמות ובלי תוכן המשחק).`));
+  viewIs(room ? 'join' : 'home');
+  app.replaceChildren(...kids.filter(Boolean));
 }
 
 function deviceToken() {
@@ -475,7 +575,8 @@ function startHost(name) {
 function startGuest(name, code) {
   session = { role: 'guest', code, token: deviceToken(), name };
   store.set('session', session);
-  state = store.get('gstate:' + code, null);
+  store.del('gstate:' + code); // a fresh join never trusts an old copy of some other evening
+  state = null;
   startNet();
   state ? onState() : render();
 }
@@ -484,7 +585,8 @@ function leaveRoom() {
   net && net.destroy(); net = null;
   clearInterval(outboxTimer); outbox = [];
   store.del('session');
-  session = null; state = null; seenChat = null; prevGameKey = null;
+  session = null; state = null; seenChat = null; prevGameKey = null; link = 'waiting';
+  setLogContext('');
   closeChat();
   const u = new URL(location.href);
   u.searchParams.delete('room');
@@ -518,6 +620,8 @@ async function boot() {
     if (session.role === 'host') {
       state = store.get('state:' + session.code, null) || newState(session.name, session.token);
       if (!state.acks) state.acks = [];
+      if (!state.sid) state.sid = rid(10);
+      if (session.fresh) { session.fresh = false; store.set('session', session); }
     } else {
       state = store.get('gstate:' + session.code, null);
     }
@@ -529,5 +633,5 @@ async function boot() {
   homeView(room || null);
 }
 // small handle for automated tests / debugging in the console
-window.__dv = { get net() { return net; }, get state() { return state; }, get link() { return link; }, get session() { return session; }, get outbox() { return outbox; } };
+window.__dv = { get net() { return net; }, get state() { return state; }, get link() { return link; }, get session() { return session; }, get outbox() { return outbox; }, get log() { return logRing; } };
 boot();

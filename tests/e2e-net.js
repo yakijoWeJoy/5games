@@ -2,6 +2,16 @@
 // Run: node tests/e2e-net.js [baseUrl]   (needs playwright; serve the repo, e.g. python3 -m http.server 8765)
 const { chromium } = require('playwright');
 const BASE = process.argv[2] || 'http://localhost:8765/';
+// MODE: relay  = relay servers only (two phones on mobile data that cannot reach each other directly)
+//       both   = relay + direct
+//       direct = no relay server reachable, direct WebRTC only
+//       half   = one relay server is dead, one works
+//       live   = whatever the site really uses (public relay servers)
+const MODE = process.env.MODE || 'relay';
+const B1 = { name: 't1', host: 'localhost', port: 9101, path: '/', ssl: false };
+const B2 = { name: 't2', host: 'localhost', port: 9102, path: '/', ssl: false };
+const DEADB = { name: 'dead', host: 'localhost', port: 9199, path: '/', ssl: false };
+const CFG = { relay: { brokers: [B1, B2], noDirect: true }, both: { brokers: [B1, B2] }, direct: { brokers: [DEADB], noDirect: false }, half: { brokers: [DEADB, B2], noDirect: true }, live: null }[MODE];
 const LINK_T = 60000;
 const results = [];
 let browser;
@@ -53,7 +63,14 @@ async function turnOf(A, B, want) {
   }
   throw new Error('could not hand the turn over');
 }
-async function newCtx() { return browser.newContext({ viewport: { width: 390, height: 844 } }); }
+async function newCtx() {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  if (CFG) await ctx.addInitScript(cfg => { window.__dvBrokers = cfg.brokers; if (cfg.noDirect) window.__dvNoDirect = true; }, CFG);
+  return ctx;
+}
+/** cut a phone off from everything (in and out) without it noticing, like a dead zone */
+const mute = p => p.evaluate(() => { const n = window.__dv.net; n.__rx = n.receive; n.receive = () => {}; for (const c of n.channels) { c.__tx = c.send; c.send = () => true; } });
+const unmute = p => p.evaluate(() => { const n = window.__dv.net; if (n.__rx) { n.receive = n.__rx; n.__rx = null; } for (const c of n.channels) if (c.__tx) { c.send = c.__tx; c.__tx = null; } });
 async function host(ctx, name, errs, tag) {
   const A = await ctx.newPage(); watch(A, tag || 'host', errs);
   await A.goto(BASE); await A.fill('input.paper', name); await A.click('text=פותחים דף חדש');
@@ -74,6 +91,7 @@ async function scenario(name, fn) {
 (async () => {
   browser = await chromium.launch();
   const errs = [];
+  console.log('MODE', MODE);
   const cA = await newCtx(), cB = await newCtx();
   let [A, code] = await host(cA, 'אבא', errs);
   let B = await join(cB, code, 'נועה', errs);
@@ -156,13 +174,14 @@ async function scenario(name, fn) {
   await scenario('08 connection dies silently; a move made in the dead window arrives exactly once', async () => {
     await turnOf(A, B, B);
     const before = lines(await same(A, B));
-    // kill the data channel without telling anybody (like walking out of wifi range)
-    await B.evaluate(() => { const c = window.__dv.net.conn; c.send = () => {}; c.removeAllListeners('data'); });
-    await A.evaluate(() => { const c = window.__dv.net.conn; c.send = () => {}; });
+    // the guest walks into a dead zone: nothing gets in or out, and nobody is told
+    await mute(B);
     await clickLine(B); // still looks connected -> goes to the outbox
     await sleep(500);
     if ((await B.evaluate(() => window.__dv.outbox.length)) !== 1) throw new Error('move was not kept in the outbox');
     await B.waitForFunction(() => window.__dv.link !== 'linked', null, { timeout: 30000 });
+    await A.waitForFunction(() => window.__dv.link !== 'linked', null, { timeout: 30000 });
+    await unmute(B);
     await linked(B); await linked(A);
     const t0 = Date.now();
     for (;;) {
@@ -180,9 +199,10 @@ async function scenario(name, fn) {
   });
 
   await scenario('09 host side goes deaf (phone asleep) and wakes up', async () => {
-    // host stops hearing the guest; the guest notices, redials and the host accepts the new line
-    await A.evaluate(() => { const c = window.__dv.net.conn; c.removeAllListeners('data'); c.send = () => {}; });
+    await mute(A);
     await B.waitForFunction(() => window.__dv.link !== 'linked', null, { timeout: 30000 });
+    await sleep(4000);
+    await unmute(A);
     await linked(B); await linked(A);
     await move(A, B); await move(A, B);
   });
@@ -198,7 +218,7 @@ async function scenario(name, fn) {
       const n = window.__dv.net;
       n.send({ t: 'act', id: 'stale-1', a: { k: 'g', gid: 'not-this-game', a: { k: 'line', o: 'h', r: 0, c: 0 } } });
       n.send({ t: 'act', id: 'junk-1', a: null });
-      n.send({ t: 'act' }); n.send('boo'); n.send(42); n.send([]); n.send({ t: 'state', s: { rev: 999 } }); n.send({ t: 'hello' });
+      n.send({ t: 'act' }); n.send('boo'); n.send(42); n.send([]); for (const c of n.channels) { c.send('not json'); c.send('{"i":"x1","r":"g","f":"zz","d":{"t":"act","a":{"k":"menu"}}}'); c.send('{"i":"x2","r":"g","f":"zz","k":"wrong-token","d":{"t":"act","a":{"k":"menu"}}}'); } n.send({ t: 'state', s: { rev: 999 } }); n.send({ t: 'hello' });
       n.send({ t: 'act', id: 'pick-stale', a: { k: 'pick', game: 'bull', from: 'old-game' } });
     });
     await sleep(1200);
@@ -222,7 +242,7 @@ async function scenario(name, fn) {
   await scenario('12 "replace partner": the new phone gets in, the old one is told the page is full', async () => {
     await A.click('text=☰ תפריט'); await A.click('text=כן, לתפריט');
     await A.click('text=החלפת שותף'); await A.click('.modal >> text=כן');
-    await C.click('text=לנסות שוב');
+    await C.click('button:has-text("לנסות שוב")');
     await linked(C);
     await B.waitForFunction(() => window.__dv.link === 'full', null, { timeout: LINK_T });
     const s = await same(A, C);
@@ -292,9 +312,9 @@ async function scenario(name, fn) {
     await cE.addInitScript(() => { window.__dvForceCode = '4242'; });
     await cF.addInitScript(() => { if (!sessionStorage.getItem('forced')) { sessionStorage.setItem('forced', '1'); window.__dvForceCode = '4242'; } });
     const [E, c1] = await host(cE, 'משפחה1', errs, 'fam1');
-    await E.waitForFunction(() => window.__dv.link === 'waiting' && window.__dv.net.peer && window.__dv.net.peer.open, null, { timeout: LINK_T });
+    await E.waitForFunction(() => (window.__dv.net.anyOpen() || window.__dv.net.channels.some(c => c.signal)), null, { timeout: LINK_T }); await sleep(9000); // no longer 'fresh'
     const [F] = await host(cF, 'משפחה2', errs, 'fam2');
-    await F.waitForFunction(() => window.__dv.session.code !== '4242' && window.__dv.net.peer && window.__dv.net.peer.open, null, { timeout: LINK_T });
+    await F.waitForFunction(() => window.__dv.session.code !== '4242' && (window.__dv.net.anyOpen() || window.__dv.net.channels.some(c => c.signal)), null, { timeout: LINK_T });
     const c2 = await F.evaluate(() => window.__dv.session.code);
     if (c1 !== '4242' || (await F.textContent('.code-big')).trim() !== c2) throw new Error('code not refreshed on screen');
     const cG = await newCtx();
