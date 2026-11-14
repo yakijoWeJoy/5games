@@ -113,6 +113,6 @@ export default {
     for (let r = 0; r < D; r++) for (let c = 0; c < D; c++) svg.append(s('circle', { cx: px(c), cy: px(r), r: 4, fill: '#3b3a36' }));
     svg.append(hits);
     root.append(svg);
-    if (myTurn) root.append(h('p', { class: 'center soft', style: { fontSize: '14px' } }, 'לוחצים בין שתי נקודות כדי למתוח קו'));
+    if (!g.over) root.append(h('p', { class: 'center soft', style: { fontSize: '14px' } }, myTurn ? 'לוחצים בין שתי נקודות כדי למתוח קו' : `מחכים ל${names[ctx.other]}…`));
   },
 };

@@ -15,13 +15,16 @@ const DEVICES = [
   { name: 'phone-360 (common android)', w: 360, h: 740, dpr: 3, mobile: true },
   { name: 'phone-375 (iPhone SE/mini)', w: 375, h: 667, dpr: 2, mobile: true },
   { name: 'phone-390 (iPhone 14)', w: 390, h: 844, dpr: 3, mobile: true },
+  { name: 'phone-393x655 (iPhone + Brave, as seen in the logs)', w: 393, h: 655, dpr: 3, mobile: true },
   { name: 'phone-412 (Pixel)', w: 412, h: 915, dpr: 2.6, mobile: true },
   { name: 'phone-430 (iPhone Pro Max)', w: 430, h: 932, dpr: 3, mobile: true },
   { name: 'phone-landscape', w: 844, h: 390, dpr: 3, mobile: true },
   { name: 'tablet-768', w: 768, h: 1024, dpr: 2, mobile: true },
   { name: 'tablet-landscape', w: 1024, h: 768, dpr: 2, mobile: true },
+  { name: 'laptop-1280x631 (as seen in the logs)', w: 1280, h: 631, dpr: 1, mobile: false },
   { name: 'laptop-1366', w: 1366, h: 768, dpr: 1, mobile: false },
   { name: 'desktop-1920', w: 1920, h: 1080, dpr: 1, mobile: false },
+  { name: 'ultrawide-3440 (as seen in the logs)', w: 3440, h: 1440, dpr: 1, mobile: false },
 ];
 const SCENES = ['home', 'join', 'invite', 'menu', 'menu-mid', 'bull-secret', 'bull-play', 'bull-over', 'hangman-word', 'hangman-play',
   'ships-place', 'ships-play', 'dots', 'five', 'five-over', 'decided', 'decided-menu', 'done-menu', 'lost'];

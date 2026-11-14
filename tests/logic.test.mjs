@@ -1,7 +1,7 @@
 // Run: node tests/logic.test.mjs
 // Fuzzes the shared reducer and all five games: random legal play, garbage input, invariants.
 import assert from 'node:assert/strict';
-import { GAMES, BY, newState, reduce } from '../js/core.js';
+import { GAMES, newState, reduce, seriesWins, seriesDecided, seriesDone, nextGame } from '../js/core.js';
 import { SHIPS, randomLayout, validLayout } from '../js/games/ships.js';
 
 let seed = 12345;
@@ -20,7 +20,7 @@ const step = (s, p, a) => { const c = clone(s); const ok = reduce(c, p, a); retu
 const jsonSafe = s => assert.deepEqual(clone(s), s);
 
 const GARBAGE = [null, undefined, 0, 'x', [], {}, { k: 'g' }, { k: 'g', a: null }, { k: 'g', a: {} }, { k: 'g', a: { k: 'zzz' } },
-  { k: 'pick' }, { k: 'pick', game: 'constructor' }, { k: 'pick', game: '__proto__' }, { k: 'nope' },
+  { k: 'pick', game: 'bull' }, { k: 'jump', game: 'bull' }, { k: 'jump', game: '__proto__' }, { k: 'nope' }, { k: 'next', from: 'wrong' }, { k: 'replay', from: 'wrong' }, { k: 'newSeries', n: -5 }, { k: 'newSeries', from: 'wrong' },
   { k: 'g', a: { k: 'guess', code: 1234 } }, { k: 'g', a: { k: 'guess', code: '1123' } }, { k: 'g', a: { k: 'secret', code: 'abcd' } },
   { k: 'g', a: { k: 'letter', l: null } }, { k: 'g', a: { k: 'letter', l: 'אב' } }, { k: 'g', a: { k: 'word', text: 'a', lang: 'en' } },
   { k: 'g', a: { k: 'word', text: 'שלום', lang: 'xx' } }, { k: 'g', a: { k: 'word', text: '<b>', lang: 'en' } },
@@ -31,7 +31,7 @@ const GARBAGE = [null, undefined, 0, 'x', [], {}, { k: 'g' }, { k: 'g', a: null 
   { k: 'g', a: { k: 'line' } }, { k: 'g', a: { k: 'line', o: 'h', r: 99, c: 0 } }, { k: 'g', a: { k: 'line', o: 'x', r: 0, c: 0 } },
   { k: 'g', a: { k: 'line', o: 'h', r: 0, c: 5 } }, { k: 'g', a: { k: 'line', o: 'v', r: 5, c: 0 } }, { k: 'g', a: { k: 'line', o: 'h', r: '0', c: 0 } },
   { k: 'g', a: { k: 'put' } }, { k: 'g', a: { k: 'put', i: -1 } }, { k: 'g', a: { k: 'put', i: 441 } }, { k: 'g', a: { k: 'put', i: 2.5 } }, { k: 'g', a: { k: 'put', i: '3' } },
-  { k: 'chat' }, { k: 'chat', text: '   ' }, { k: 'menu', from: 'wrong' }, { k: 'pick', game: 'bull', from: 'wrong' }, { k: 'g', gid: 'wrong', a: { k: 'put', i: 0 } },
+  { k: 'chat' }, { k: 'chat', text: '   ' }, { k: 'menu', from: 'wrong' }, { k: 'g', gid: 'wrong', a: { k: 'put', i: 0 } },
 ];
 
 /** throw garbage at the state from both players: nothing may change and nothing may throw */
@@ -129,7 +129,6 @@ const inv = {
         for (const x of g.shots[p]) assert.equal(x.res !== 'miss', enemy.some(sh => sh.cells.some(([r, c]) => r === x.r && c === x.c)));
       }
     }
-    assert.ok(Math.abs(g.shots[0].length - g.shots[1].length) <= 1);
     if (g.over) assert.equal(g.sunk[g.over.winner].length, 4);
   },
   dots(g) {
@@ -162,17 +161,20 @@ const inv = {
 };
 
 function playOne(id, s0) {
-  let s = step(s0, ri(2), { k: 'pick', game: id, from: s0.game ? s0.game.id : null });
-  assert.ok(s, 'pick works');
+  assert.equal(nextGame(s0), id, 'the series is played in order');
+  let s = step(s0, ri(2), { k: 'next', from: s0.game ? s0.game.id : null });
+  assert.ok(s, 'next works');
+  assert.equal(s.current, id);
   const gid = s.game.id;
-  const scoreBefore = clone(s.score);
+  const before = clone(s.series.results);
   let guard = 0;
   while (!s.game.over) {
     assert.ok(++guard < 5000, id + ' never ends');
     if (guard % 7 === 0) garbage(s);
+    // the series cannot move on while a game is being played
+    if (guard % 11 === 0) { assert.equal(step(s, 0, { k: 'next' }), null); assert.equal(step(s, 1, { k: 'replay' }), null); }
     const p = ri(2);
     const moves = legal[id](s.game, p);
-    const turnOwner = legal[id](s.game, 0).length ? 0 : 1;
     if (!moves.length) {
       // not this player's turn: every move the other player could make must be refused for p
       for (const m of legal[id](s.game, 1 - p)) {
@@ -181,62 +183,178 @@ function playOne(id, s0) {
       }
       continue;
     }
-    void turnOwner;
     const m = moves[0];
     const n = step(s, p, { k: 'g', gid, a: m });
     if (!n) { assert.equal(id, 'ships', `${id}: legal move refused ${JSON.stringify(m)}`); continue; } // ships: random cell may be used
-    // replaying the very same action must never be accepted twice in simultaneous-safe games
     s = n;
     jsonSafe(s);
     inv[id](s.game);
   }
-  // exactly one score entry was added
-  const w = s.game.over.winner;
-  const exp = clone(scoreBefore); exp[id][w == null ? 2 : w]++;
-  assert.deepEqual(s.score, exp, 'score counted exactly once');
-  assert.equal(s.lastDone, id);
+  // exactly one result was written down
+  assert.deepEqual(s.series.results, [...before, { game: id, winner: s.game.over.winner }], 'result counted exactly once');
   // nothing can be played after the end
   for (const p of [0, 1]) for (const m of [...legal[id]({ ...s.game, over: null }, p)]) assert.equal(step(s, p, { k: 'g', gid, a: m }), null);
   garbage(s);
   return s;
 }
 
-// ---------- run ----------
+// ---------- run: 60 full series ----------
 let s = fresh();
 garbage(s);
-assert.equal(step(newState('A', 't'), 0, { k: 'pick', game: 'bull' }), null, 'cannot start before a partner joined');
+assert.equal(step(newState('A', 't'), 0, { k: 'next' }), null, 'cannot start before a partner joined');
 assert.equal(step(s, 0, { k: 'menu' }), null, 'menu with no game is a no-op');
 
 const counts = {};
+let expectEvening = [0, 0, 0];
 for (let round = 0; round < 60; round++) {
+  assert.equal(s.series.n, round + 1);
   for (const G of GAMES) {
     s = playOne(G.id, s);
     counts[G.id] = (counts[G.id] || 0) + 1;
   }
+  assert.ok(seriesDone(s)); assert.equal(nextGame(s), null);
+  assert.equal(step(s, 0, { k: 'next' }), null, 'no sixth game');
+  const w = seriesWins(s);
+  expectEvening[w[0] > w[1] ? 0 : w[1] > w[0] ? 1 : 2]++;
+  s = step(s, ri(2), { k: 'newSeries', n: s.series.n });
+  assert.ok(s);
+  assert.deepEqual(s.evening, expectEvening, 'a finished series goes into the evening tally exactly once');
+  assert.deepEqual(s.series.results, []);
 }
-const total = Object.values(s.score).flat().reduce((a, b) => a + b, 0);
-assert.equal(total, 300);
-for (const G of GAMES) assert.equal(s.score[G.id].reduce((a, b) => a + b, 0), 60);
+assert.equal(s.evening.reduce((a, b) => a + b, 0), 60);
 
-// starter alternates
+/** a state that is inside game `id` (test-only jump) */
+const at = id => { const t = fresh(); assert.ok(reduce(t, 0, { k: 'jump', game: id }, { test: true })); return t; };
+assert.equal(step(fresh(), 0, { k: 'jump', game: 'dots' }), null, 'jump is test-only');
+{ // a jumped game is outside the series
+  let t = at('five');
+  const a = t.game.turn;
+  for (let k = 0; k < 5; k++) { t = step(t, a, { k: 'g', a: { k: 'put', i: 10 * 21 + k } }); if (k < 4) t = step(t, 1 - a, { k: 'g', a: { k: 'put', i: 15 * 21 + k } }); }
+  assert.ok(t.game.over); assert.deepEqual(t.series.results, []);
+  assert.equal(step(t, 0, { k: 'replay' }), null);
+}
+
+// ---------- series rules ----------
+/** finish the current game quickly with winner w (five in a row / bull are easy to steer) */
+function win(t, w) {
+  const G = (p, a) => { const n = step(t, p, { k: 'g', a }); assert.ok(n, JSON.stringify(a)); t = n; };
+  switch (t.current) {
+    case 'bull': {
+      G(0, { k: 'secret', code: '1234' }); G(1, { k: 'secret', code: '5678' });
+      const sec = p => (p === 0 ? '5678' : '1234');
+      const f = t.game.turn;
+      G(f, { k: 'guess', code: f === w ? sec(f) : '9012' });
+      if (!t.game.over) G(1 - f, { k: 'guess', code: 1 - f === w ? sec(1 - f) : '9013' });
+      if (w === null) assert.fail('use tie() for ties');
+      break;
+    }
+    case 'hangman': {
+      G(0, { k: 'word', text: 'אב', lang: 'he' }); G(1, { k: 'word', text: 'גד', lang: 'he' });
+      if (t.game.turn !== w) G(t.game.turn, { k: 'letter', l: 'ק' });
+      for (const l of (w === 0 ? 'גד' : 'אב')) G(w, { k: 'letter', l });
+      break;
+    }
+    case 'ships': {
+      const lay = [{ id: 'nun', cells: [[0, 0], [0, 1], [1, 0], [2, 0], [3, 0]] }, { id: 's4', cells: [[2, 2], [2, 3], [2, 4], [2, 5]] }, { id: 's3', cells: [[5, 0], [5, 1], [5, 2]] }, { id: 's2', cells: [[4, 4], [5, 4]] }];
+      G(0, { k: 'ready', ships: lay }); G(1, { k: 'ready', ships: lay });
+      if (t.game.turn !== w) G(t.game.turn, { k: 'shot', r: 0, c: 5 });
+      for (const sh of lay) for (const [r, c] of sh.cells) G(w, { k: 'shot', r, c }); // every hit keeps the turn
+      break;
+    }
+    case 'dots': {
+      // steer: the winner closes boxes greedily, the loser never closes one when avoidable
+      let guard = 0;
+      while (!t.game.over) {
+        assert.ok(++guard < 200);
+        const p = t.game.turn, g = t.game;
+        const all = [];
+        g.h.forEach((row, r) => row.forEach((v, c) => { if (v < 0) all.push({ k: 'line', o: 'h', r, c }); }));
+        g.v.forEach((row, r) => row.forEach((v, c) => { if (v < 0) all.push({ k: 'line', o: 'v', r, c }); }));
+        const scored = all.map(m => { const n = step(t, p, { k: 'g', a: m }); return { m, got: n.game.lastGot, gives: n.game.turn !== p ? Math.max(0, ...all.filter(x => x !== m).map(x => { const z = step(n, 1 - p, { k: 'g', a: x }); return z ? z.game.lastGot : 0; })) : 0 }; });
+        scored.sort((a, b) => (p === w ? b.got - a.got || a.gives - b.gives : a.got - b.got || b.gives - a.gives));
+        G(p, scored[0].m);
+      }
+      break;
+    }
+    case 'five': {
+      let k = 0, j = 0;
+      while (!t.game.over) { const p = t.game.turn; G(p, { k: 'put', i: p === w ? 10 * 21 + 3 + k++ : (2 + 2 * j++) * 21 + 1 }); }
+      break;
+    }
+  }
+  assert.equal(t.game.over.winner, w, `${t.current} steered to ${w}`);
+  return t;
+}
+const next = t => { const n = step(t, 0, { k: 'next' }); assert.ok(n, 'next'); return n; };
 {
-  let t = fresh();
-  t = step(t, 0, { k: 'pick', game: 'dots' }); assert.equal(t.game.turn, 0);
-  t = step(t, 0, { k: 'menu' });
-  t = step(t, 0, { k: 'pick', game: 'dots' }); assert.equal(t.game.turn, 1);
-  // two phones press "next game" at the same moment: only the first one counts
+  // who opens: alternates game to game and series to series
+  let t = next(fresh());
+  assert.equal(t.current, 'bull'); assert.equal(t.game.turn, 1);
+  // two phones press "start" at the same moment: only the first one counts
+  assert.equal(step(t, 1, { k: 'next', from: null }), null);
+  assert.equal(step(t, 1, { k: 'next' }), null, 'no skipping a game that is being played');
+  // leaving mid-game: nothing is written, the same game starts again from scratch
+  const gid = t.game.id;
+  t = step(t, 1, { k: 'menu', from: gid });
+  assert.deepEqual(t.series.results, []); assert.equal(t.leftBy, 1); assert.equal(nextGame(t), 'bull');
+  assert.equal(step(t, 0, { k: 'g', gid, a: { k: 'secret', code: '1234' } }), null, 'a move for the abandoned game is refused');
+  t = next(t); assert.equal(t.current, 'bull'); assert.notEqual(t.game.id, gid); assert.equal(t.game.turn, 1);
+
+  t = win(t, 0);
+  assert.deepEqual(seriesWins(t), [1, 0, 0]);
+  // replay: the result is erased, same opener, and it is the same game again
+  const r = step(t, 1, { k: 'replay' });
+  assert.ok(r); assert.equal(r.current, 'bull'); assert.deepEqual(r.series.results, []); assert.equal(r.game.turn, 1); assert.equal(r.game.over, null);
+  assert.equal(step(r, 0, { k: 'replay' }), null, 'cannot replay a game that is not over');
+  t = win(r, 1);
+  assert.deepEqual(seriesWins(t), [0, 1, 0], 'only the replayed result counts');
+  // double press on "next game"
   const from = t.game.id;
-  const a = step(t, 0, { k: 'pick', game: 'five', from });
-  assert.ok(a);
-  assert.equal(step(a, 1, { k: 'pick', game: 'five', from }), null);
-  // a move made for the previous game is refused
-  assert.equal(step(a, a.game.turn, { k: 'g', gid: from, a: { k: 'put', i: 5 } }), null);
-  // leaving mid-game gives no score
-  const b = step(a, 1, { k: 'menu', from: a.game.id });
-  assert.deepEqual(b.score, t.score); assert.equal(b.leftBy, 1);
+  const a = step(t, 0, { k: 'next', from });
+  assert.equal(a.current, 'hangman'); assert.equal(a.game.turn, 0);
+  assert.equal(step(a, 1, { k: 'next', from }), null);
+  assert.equal(step(a, 1, { k: 'replay', from }), null, 'replay of the previous game is no longer possible');
+  t = win(a, 1);
+  assert.equal(seriesDecided(t), null);
+  t = win(next(t), 1);
+  // three wins: decided before the fifth game – but playing on is allowed
+  assert.equal(seriesDecided(t), 1); assert.equal(seriesDone(t), false); assert.equal(nextGame(t), 'dots');
+  let u = win(next(t), 0);
+  u = win(next(u), 0);
+  assert.ok(seriesDone(u)); assert.deepEqual(seriesWins(u), [2, 3, 0]); assert.equal(seriesDecided(u), 1);
+  assert.equal(step(u, 0, { k: 'next' }), null);
+  assert.ok(step(u, 0, { k: 'replay' }), 'the last game can still be replayed');
+  u = step(u, 0, { k: 'newSeries', n: 1 });
+  assert.deepEqual(u.evening, [0, 1, 0]); assert.equal(u.series.n, 2); assert.equal(u.game, null);
+  assert.equal(step(u, 1, { k: 'newSeries', n: 1 }), null, 'two phones pressing "new series" start only one');
+  // new series right after it was decided (without playing to the end) still counts
+  const v = step(t, 1, { k: 'newSeries' });
+  assert.deepEqual(v.evening, [0, 1, 0]);
+  // a new series in the middle of an undecided one: nobody gets it
+  let m = win(next(fresh()), 0);
+  m = step(m, 0, { k: 'newSeries' });
+  assert.deepEqual(m.evening, [0, 0, 0]); assert.equal(m.series.n, 2);
+  // in series 2 the other player opens the first game
+  assert.equal(next(m).game.turn, 0);
+  // new series while a game is being played is allowed (any time)
+  m = step(next(m), 1, { k: 'newSeries' });
+  assert.ok(m); assert.equal(m.series.n, 3); assert.equal(m.game, null);
   // reset
-  const c = step(s, 0, { k: 'resetScores' });
-  assert.equal(Object.values(c.score).flat().reduce((x, y) => x + y, 0), 0);
+  const z = step(u, 0, { k: 'resetEvening' });
+  assert.deepEqual(z.evening, [0, 0, 0]); assert.equal(z.series.n, 1);
+  // a tied series: 2:2 and one tie
+  let q = fresh();
+  q = next(q);
+  { // bull tie: both crack the code in the same round
+    const G = (p, a2) => { q = step(q, p, { k: 'g', a: a2 }); assert.ok(q); };
+    G(0, { k: 'secret', code: '1234' }); G(1, { k: 'secret', code: '5678' });
+    const f = q.game.turn; G(f, { k: 'guess', code: f === 0 ? '5678' : '1234' }); G(1 - f, { k: 'guess', code: f === 0 ? '1234' : '5678' });
+    assert.deepEqual(q.game.over, { winner: null });
+  }
+  for (const w of [0, 1, 0, 1]) q = win(next(q), w);
+  assert.deepEqual(seriesWins(q), [2, 2, 1]); assert.equal(seriesDecided(q), null);
+  q = step(q, 0, { k: 'newSeries' });
+  assert.deepEqual(q.evening, [0, 0, 1]);
 }
 
 // chat is capped and trimmed
@@ -247,31 +365,45 @@ for (const G of GAMES) assert.equal(s.score[G.id].reduce((a, b) => a + b, 0), 60
   assert.ok(t.chat.every(m => m.text.length <= 240));
 }
 
-// specific rule checks
+// ---------- specific rule checks ----------
 {
-  // bull: bulls/hits counting
-  let t = step(fresh(), 0, { k: 'pick', game: 'bull' });
+  // bull: bulls/hits counting, equal number of turns
+  let t = at('bull');
   t = step(t, 0, { k: 'g', a: { k: 'secret', code: '0123' } });
   assert.equal(step(t, 0, { k: 'g', a: { k: 'secret', code: '4567' } }), null, 'secret cannot be changed');
   assert.equal(step(t, 0, { k: 'g', a: { k: 'guess', code: '4567' } }), null, 'no guessing before both chose');
   t = step(t, 1, { k: 'g', a: { k: 'secret', code: '4567' } });
-  assert.equal(step(t, 1, { k: 'g', a: { k: 'guess', code: '0123' } }), null, 'not your turn');
-  t = step(t, 0, { k: 'g', a: { k: 'guess', code: '4576' } }); assert.deepEqual([t.game.guesses[0][0].b, t.game.guesses[0][0].p], [2, 2]);
-  t = step(t, 1, { k: 'g', a: { k: 'guess', code: '3210' } }); assert.deepEqual([t.game.guesses[1][0].b, t.game.guesses[1][0].p], [0, 4]);
-  assert.equal(step(t, 0, { k: 'g', a: { k: 'guess', code: '4576' } }), null, 'same guess twice');
-  t = step(t, 0, { k: 'g', a: { k: 'guess', code: '4567' } }); assert.equal(t.game.over, null, 'second player gets a last chance');
-  t = step(t, 1, { k: 'g', a: { k: 'guess', code: '0123' } }); assert.deepEqual(t.game.over, { winner: null }); assert.equal(t.score.bull[2], 1);
+  const f = t.game.turn, o = 1 - f, secOf = p => (p === 0 ? '0123' : '4567');
+  assert.equal(step(t, o, { k: 'g', a: { k: 'guess', code: secOf(f) } }), null, 'not your turn');
+  const near = p => (p === 0 ? '4576' : '3210'); // guesses at the other player's code
+  t = step(t, f, { k: 'g', a: { k: 'guess', code: near(f) } });
+  assert.deepEqual([t.game.guesses[f][0].b, t.game.guesses[f][0].p], f === 0 ? [2, 2] : [0, 4]);
+  t = step(t, o, { k: 'g', a: { k: 'guess', code: near(o) } });
+  assert.equal(step(t, f, { k: 'g', a: { k: 'guess', code: near(f) } }), null, 'same guess twice');
+  t = step(t, f, { k: 'g', a: { k: 'guess', code: secOf(o) } }); assert.equal(t.game.over, null, 'second player gets a last chance');
+  t = step(t, o, { k: 'g', a: { k: 'guess', code: secOf(f) } }); assert.deepEqual(t.game.over, { winner: null });
 
-  // hangman: finals count as regular letters, solve ignores spaces/case, 10 misses hang
-  t = step(fresh(), 0, { k: 'pick', game: 'hangman' });
+  // hangman: a correct letter keeps the turn, a wrong one passes it; finals count as regular letters
+  t = at('hangman');
   t = step(t, 0, { k: 'g', a: { k: 'word', text: '  שלום   עולם ', lang: 'he' } }); assert.equal(t.game.words[0].text, 'שלום עולם');
   t = step(t, 1, { k: 'g', a: { k: 'word', text: 'ab c', lang: 'en' } }); assert.equal(t.game.words[1].text, 'AB C');
-  t = step(t, 0, { k: 'g', a: { k: 'letter', l: 'a' } }); assert.equal(t.game.wrong[0], 0);
-  t = step(t, 1, { k: 'g', a: { k: 'letter', l: 'מ' } }); assert.equal(t.game.wrong[1], 0, 'מ reveals ם');
+  assert.equal(t.game.turn, 0);
+  t = step(t, 0, { k: 'g', a: { k: 'letter', l: 'a' } }); assert.equal(t.game.wrong[0], 0); assert.equal(t.game.turn, 0, 'hit: another turn');
+  assert.equal(step(t, 1, { k: 'g', a: { k: 'letter', l: 'מ' } }), null, 'not the other player yet');
   assert.equal(step(t, 0, { k: 'g', a: { k: 'letter', l: 'A' } }), null, 'letter already asked');
   assert.equal(step(t, 0, { k: 'g', a: { k: 'letter', l: 'ש' } }), null, 'hebrew letter on english word');
+  t = step(t, 0, { k: 'g', a: { k: 'letter', l: 'Z' } }); assert.equal(t.game.wrong[0], 1); assert.equal(t.game.turn, 1, 'miss: turn passes');
+  t = step(t, 1, { k: 'g', a: { k: 'letter', l: 'מ' } }); assert.equal(t.game.wrong[1], 0, 'מ reveals ם'); assert.equal(t.game.turn, 1);
+  t = step(t, 1, { k: 'g', a: { k: 'solve', text: 'לא נכון' } }); assert.equal(t.game.wrong[1], 1); assert.equal(t.game.turn, 0, 'wrong whole-word guess passes the turn');
   t = step(t, 0, { k: 'g', a: { k: 'solve', text: 'abc' } }); assert.deepEqual(t.game.over, { winner: 0 });
-  t = step(fresh(), 0, { k: 'pick', game: 'hangman' });
+  // finishing the word letter by letter in one run of turns
+  t = at('hangman');
+  t = step(t, 0, { k: 'g', a: { k: 'word', text: 'אב', lang: 'he' } });
+  t = step(t, 1, { k: 'g', a: { k: 'word', text: 'גד', lang: 'he' } });
+  t = step(t, 0, { k: 'g', a: { k: 'letter', l: 'ג' } }); t = step(t, 0, { k: 'g', a: { k: 'letter', l: 'ד' } });
+  assert.deepEqual(t.game.over, { winner: 0 });
+  // ten misses hang
+  t = at('hangman');
   t = step(t, 0, { k: 'g', a: { k: 'word', text: 'אב', lang: 'he' } });
   t = step(t, 1, { k: 'g', a: { k: 'word', text: 'גד', lang: 'he' } });
   const bad0 = 'הוזחטיכלמנ'.split(''), bad1 = 'סעפצקרשתהו'.split('');
@@ -279,15 +411,15 @@ for (const G of GAMES) assert.equal(s.score[G.id].reduce((a, b) => a + b, 0), 60
   assert.deepEqual(t.game.over, { winner: 1, hanged: 0 });
 
   // dots: closing a box gives another turn
-  t = step(fresh(), 0, { k: 'pick', game: 'dots' });
+  t = at('dots');
+  const d0 = t.game.turn, d1 = 1 - d0;
   const L = (p, o, r, c) => { const n = step(t, p, { k: 'g', a: { k: 'line', o, r, c } }); assert.ok(n, `line ${o}${r}${c} by ${p}`); t = n; };
-  L(0, 'h', 0, 0); L(1, 'h', 1, 0); L(0, 'v', 0, 0); L(1, 'v', 0, 1);
-  assert.equal(t.game.box[0][0], 1); assert.equal(t.game.turn, 1, 'extra turn after closing');
-  assert.equal(step(t, 1, { k: 'g', a: { k: 'line', o: 'h', r: 0, c: 0 } }), null, 'line already drawn');
-  // one line closing two boxes
-  L(1, 'h', 0, 1); L(0, 'h', 1, 1); L(1, 'v', 0, 2); assert.equal(t.game.box[0][1], 1); assert.equal(t.game.turn, 1);
+  L(d0, 'h', 0, 0); L(d1, 'h', 1, 0); L(d0, 'v', 0, 0); L(d1, 'v', 0, 1);
+  assert.equal(t.game.box[0][0], d1); assert.equal(t.game.turn, d1, 'extra turn after closing');
+  assert.equal(step(t, d1, { k: 'g', a: { k: 'line', o: 'h', r: 0, c: 0 } }), null, 'line already drawn');
+  L(d1, 'h', 0, 1); L(d0, 'h', 1, 1); L(d1, 'v', 0, 2); assert.equal(t.game.box[0][1], d1); assert.equal(t.game.turn, d1);
 
-  // ships: touching layouts are refused, sinking marks neighbours
+  // ships: touching layouts are refused; a hit keeps the turn, a miss passes it; sinking marks neighbours
   const bad = [{ id: 'nun', cells: [[0, 0], [0, 1], [1, 0], [2, 0], [3, 0]] }, { id: 's4', cells: [[1, 1], [1, 2], [1, 3], [1, 4]] }, { id: 's3', cells: [[5, 0], [5, 1], [5, 2]] }, { id: 's2', cells: [[5, 4], [5, 5]] }];
   assert.equal(validLayout(bad), false, 'diagonal touch refused');
   const good = [{ id: 'nun', cells: [[0, 0], [0, 1], [1, 0], [2, 0], [3, 0]] }, { id: 's4', cells: [[2, 2], [2, 3], [2, 4], [2, 5]] }, { id: 's3', cells: [[5, 0], [5, 1], [5, 2]] }, { id: 's2', cells: [[4, 4], [5, 4]] }];
@@ -295,29 +427,30 @@ for (const G of GAMES) assert.equal(s.score[G.id].reduce((a, b) => a + b, 0), 60
   assert.equal(validLayout([...good.slice(0, 3), { id: 's2', cells: [[4, 4], [5, 5]] }]), false, 'bent ship refused');
   assert.equal(validLayout([...good.slice(0, 3), { id: 's2', cells: [[4, 5], [4, 6]] }]), false, 'outside board refused');
   assert.equal(validLayout([good[0], good[1], good[2], good[2]]), false);
-  t = step(fresh(), 0, { k: 'pick', game: 'ships' });
+  t = at('ships');
   assert.equal(step(t, 0, { k: 'g', a: { k: 'ready', ships: bad } }), null);
   t = step(t, 0, { k: 'g', a: { k: 'ready', ships: good } });
   t = step(t, 1, { k: 'g', a: { k: 'ready', ships: good } });
-  t = step(t, 0, { k: 'g', a: { k: 'shot', r: 4, c: 4 } }); assert.equal(t.game.last.res, 'hit');
-  t = step(t, 1, { k: 'g', a: { k: 'shot', r: 0, c: 5 } }); assert.equal(t.game.last.res, 'miss');
-  t = step(t, 0, { k: 'g', a: { k: 'shot', r: 5, c: 4 } }); assert.equal(t.game.last.res, 'sunk');
-  t = step(t, 1, { k: 'g', a: { k: 'shot', r: 1, c: 5 } });
-  assert.equal(step(t, 0, { k: 'g', a: { k: 'shot', r: 5, c: 5 } }), null, 'cell next to a sunk sub is known to be empty');
-  assert.equal(step(t, 0, { k: 'g', a: { k: 'shot', r: 4, c: 4 } }), null, 'already shot');
+  const sa = t.game.turn, sb = 1 - sa;
+  t = step(t, sa, { k: 'g', a: { k: 'shot', r: 4, c: 4 } }); assert.equal(t.game.last.res, 'hit'); assert.equal(t.game.turn, sa, 'hit: shoot again');
+  assert.equal(step(t, sb, { k: 'g', a: { k: 'shot', r: 0, c: 5 } }), null, 'not the other player yet');
+  t = step(t, sa, { k: 'g', a: { k: 'shot', r: 5, c: 4 } }); assert.equal(t.game.last.res, 'sunk'); assert.equal(t.game.turn, sa, 'sunk: shoot again');
+  assert.equal(step(t, sa, { k: 'g', a: { k: 'shot', r: 5, c: 5 } }), null, 'cell next to a sunk sub is known to be empty');
+  assert.equal(step(t, sa, { k: 'g', a: { k: 'shot', r: 4, c: 4 } }), null, 'already shot');
+  t = step(t, sa, { k: 'g', a: { k: 'shot', r: 0, c: 5 } }); assert.equal(t.game.last.res, 'miss'); assert.equal(t.game.turn, sb, 'miss: turn passes');
 
-  // five: exactly five, diagonals, edges do not wrap
-  t = step(fresh(), 0, { k: 'pick', game: 'five' });
+  // five: rows do not wrap, verticals on the edge, diagonals
+  t = at('five');
+  const fa = t.game.turn, fb = 1 - fa;
   const P = (p, r, c) => { const n = step(t, p, { k: 'g', a: { k: 'put', i: r * 21 + c } }); assert.ok(n); t = n; };
-  // four at the end of one row + one at the start of the next row must NOT win
-  P(0, 0, 17); P(1, 5, 5); P(0, 0, 18); P(1, 5, 7); P(0, 0, 19); P(1, 5, 9); P(0, 0, 20); P(1, 5, 11); P(0, 1, 0);
+  P(fa, 0, 17); P(fb, 5, 5); P(fa, 0, 18); P(fb, 5, 7); P(fa, 0, 19); P(fb, 5, 9); P(fa, 0, 20); P(fb, 5, 11); P(fa, 1, 0);
   assert.equal(t.game.over, null, 'rows do not wrap around the edge');
-  P(1, 9, 9); P(0, 4, 20); P(1, 9, 11); P(0, 3, 20); P(1, 9, 13); P(0, 2, 20); P(1, 12, 12); P(0, 1, 20);
-  assert.deepEqual(t.game.over, { winner: 0 }, 'vertical five on the edge');
-  t = step(fresh(), 0, { k: 'pick', game: 'five' });
-  P(0, 10, 10); P(1, 0, 0); P(0, 9, 11); P(1, 0, 2); P(0, 8, 12); P(1, 0, 4); P(0, 6, 14); P(1, 0, 6); P(0, 7, 13);
-  assert.deepEqual(t.game.over, { winner: 0 }, 'anti-diagonal, filled in the middle');
+  P(fb, 9, 9); P(fa, 4, 20); P(fb, 9, 11); P(fa, 3, 20); P(fb, 9, 13); P(fa, 2, 20); P(fb, 12, 12); P(fa, 1, 20);
+  assert.deepEqual(t.game.over, { winner: fa }, 'vertical five on the edge');
+  t = at('five');
+  P(fa, 10, 10); P(fb, 0, 0); P(fa, 9, 11); P(fb, 0, 2); P(fa, 8, 12); P(fb, 0, 4); P(fa, 6, 14); P(fb, 0, 6); P(fa, 7, 13);
+  assert.deepEqual(t.game.over, { winner: fa }, 'anti-diagonal, filled in the middle');
   assert.deepEqual(t.game.line, [6 * 21 + 14, 10 * 21 + 10]);
 }
 
-console.log('logic tests passed ✔', counts);
+console.log('logic tests passed ✔', counts, 'evening after 60 series:', s.evening);

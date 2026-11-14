@@ -130,23 +130,36 @@ const drivers = {
   const code = (await A.textContent('.code-big')).trim();
   await B.goto(BASE + `?local=guest&room=${code}`); await B.fill('input.paper', 'נועה'); await B.click('text=הצטרפות ✏️');
   let s = await settle(A, B);
-  const order = (process.argv[4] || 'bull,hangman,ships,dots,five').split(',');
-  const ALL = ['bull', 'hangman', 'ships', 'dots', 'five'];
-  let played = 0;
+  const order = ['bull', 'hangman', 'ships', 'dots', 'five'];
+  let played = 0, replays = 0;
+  const NEXT = 'button[data-log^="next:"]';
   for (let round = 0; round < ROUNDS; round++) {
-    for (const id of order) {
+    for (let gi = 0; gi < order.length; gi++) {
+      const id = order[gi];
       s = await settle(A, B);
+      if (s.series.results.length !== gi) throw new Error(`series has ${s.series.results.length} results before game ${gi + 1}`);
+      // the only way forward is the "next game" button – on the table or on the result card, on either phone
       const starter = pick([A, B]);
-      if (!s.game) await starter.click(`.game-row >> nth=${ALL.indexOf(id)}`);
-      else if (order.length === 5) await starter.click('text=למשחק הבא');
-      else await starter.click('text=עוד סיבוב');
-      let steps = 0;
+      await starter.click(NEXT);
+      let steps = 0, replayed = false;
       for (;;) {
         s = await settle(A, B);
-        if (s.current !== id) { await sleep(100); s = await settle(A, B); }
+        if (s.current !== id) { await sleep(150); s = await settle(A, B); }
         if (s.current !== id) throw new Error(`expected ${id}, phones show ${s.current}`);
-        if (s.game.over) break;
-        if (++steps > 400) throw new Error(id + ' does not end');
+        if (s.game.over) {
+          // now and then somebody is not happy and asks for a replay: the result must disappear
+          if (!replayed && Math.random() < 0.25) {
+            replayed = true; replays++;
+            const p = pick([A, B]);
+            await p.click('button[data-log="replay"]'); await p.click('.modal >> text=כן, משחק חוזר');
+            await sleep(200);
+            s = await settle(A, B);
+            if (s.game.over || s.series.results.length !== gi) throw new Error('replay did not erase the result');
+            continue;
+          }
+          break;
+        }
+        if (++steps > 500) throw new Error(id + ' does not end');
         await drivers[id](A, B, s);
         const rev = s.rev; const t0 = Date.now();
         while ((await st(A)).rev === rev) {
@@ -157,17 +170,23 @@ const drivers = {
       }
       played++;
       await A.waitForSelector('.result'); await B.waitForSelector('.result');
-      const total = Object.values(s.score).flat().reduce((a, b) => a + b, 0);
-      if (total !== played) throw new Error(`score total ${total} after ${played} games`);
-      console.log(`  ${id.padEnd(8)} finished in ${String(steps).padStart(3)} steps, winner: ${s.game.over.winner === null ? 'tie' : s.players[s.game.over.winner].name}`);
+      if (s.series.results.length !== gi + 1) throw new Error(`series has ${s.series.results.length} results after game ${gi + 1}`);
+      const dec = s.series.results.filter(r => r.winner === 0).length >= 3 || s.series.results.filter(r => r.winner === 1).length >= 3;
+      if (dec !== !!(await A.$('.verdict'))) throw new Error('series verdict on screen does not match the score');
+      console.log(`  ${id.padEnd(8)} finished in ${String(steps).padStart(3)} steps, winner: ${s.game.over.winner === null ? 'tie' : s.players[s.game.over.winner].name}${replayed ? ' (after a replay)' : ''}`);
     }
+    // five games done: no "next game" any more, only a new series
+    if (await A.$(NEXT)) throw new Error('a sixth game is offered');
+    const ev0 = s.evening.reduce((a, b) => a + b, 0);
+    await pick([A, B]).click('button[data-log="new-series"]');
+    await sleep(200);
+    s = await settle(A, B);
+    if (s.series.n !== round + 2 || s.series.results.length || s.evening.reduce((a, b) => a + b, 0) !== ev0 + 1) throw new Error('new series did not start cleanly');
+    console.log(`  -- series ${round + 1} closed, evening: ${JSON.stringify(s.evening)}`);
   }
-  await A.click('.result >> text=לתפריט');
-  await B.waitForSelector('.game-row');
-  s = await settle(A, B);
   const tallyA = await A.$$eval('.tally path', els => els.length), tallyB = await B.$$eval('.tally path', els => els.length);
-  if (tallyA !== tallyB) throw new Error('tally marks differ between phones');
-  console.log(`played ${played} games with ${reloads} random reloads; score:`, JSON.stringify(s.score));
+  if (tallyA !== tallyB || !tallyA) throw new Error('evening tally marks differ between phones');
+  console.log(`played ${played} games (+${replays} replays) with ${reloads} random reloads`);
   console.log('script errors:', errs.length ? '\n' + errs.join('\n') : 'none');
   await browser.close();
   process.exit(errs.length ? 1 : 0);

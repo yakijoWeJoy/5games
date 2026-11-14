@@ -93,7 +93,7 @@ export function reduce(s, p, a, opts) {
       // play the game that just ended again; its result is erased
       if (!s.players[1].token || !fromOk() || !s.game || !s.game.over) return false;
       const idx = s.game.sidx;
-      if (idx !== s.series.results.length - 1 || s.series.results[idx].game !== s.current) return false;
+      if (!(idx >= 0) || idx !== s.series.results.length - 1 || s.series.results[idx].game !== s.current) return false;
       s.series.results.pop();
       startGame(s, idx, true);
       return true;

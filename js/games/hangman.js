@@ -164,7 +164,8 @@ export default {
       const display = ui.entry
         ? h('div', { class: 'word', style: { direction: lang === 'en' ? 'ltr' : 'rtl', color: myInk } },
           [...ui.entry].map(ch => h('div', { class: 'ch' + (ch === ' ' ? ' sp' : '') }, ch === ' ' ? '' : ch)))
-        : h('p', { class: 'center soft' }, 'הקלידו את המילה במקלדת למטה');
+        : h('p', { class: 'center soft', style: { margin: 0 } }, 'הקלידו את המילה במקלדת למטה');
+      const displayBox = h('div', { class: 'word-entry' }, display);
       const kb = keyboard(entryLetters(lang), l => { if (ui.entry.length < 24) { ui.entry += l; rerender(); } }, { cols: lang === 'en' ? 7 : 7 });
       kb.append(
         h('button', { class: 'key wide', onclick: () => { if (ui.entry && !ui.entry.endsWith(' ')) { ui.entry += ' '; rerender(); } } }, 'רווח'),
@@ -173,7 +174,7 @@ export default {
         h('div', { class: 'row center' },
           h('button', { class: 'btn small' + (lang === 'he' ? ' marker' : ''), onclick: () => { ui.lang = 'he'; ui.entry = ''; rerender(); } }, 'עברית'),
           h('button', { class: 'btn small' + (lang === 'en' ? ' marker' : ''), onclick: () => { ui.lang = 'en'; ui.entry = ''; rerender(); } }, 'English')),
-        display, kb, hintIn,
+        displayBox, kb, hintIn,
         h('div', { class: 'spacer' }),
         h('button', {
           class: 'btn big marker',

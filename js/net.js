@@ -19,7 +19,6 @@ const DEFAULT_BROKERS = [
   { name: 'emqx', host: 'broker.emqx.io', port: 8084, path: '/mqtt', ssl: true },
   { name: 'hivemq', host: 'broker.hivemq.com', port: 8884, path: '/mqtt', ssl: true },
   { name: 'mosquitto', host: 'test.mosquitto.org', port: 8081, path: '/', ssl: true },
-  { name: 'eclipse', host: 'mqtt.eclipseprojects.io', port: 443, path: '/mqtt', ssl: true },
 ];
 const brokers = () => window.__dvBrokers || DEFAULT_BROKERS; // tests point this at a local broker
 const rid = (n = 8) => Math.random().toString(36).slice(2, 2 + n);
@@ -115,7 +114,7 @@ class PeerChannel {
     peer.on('disconnected', () => { if (!peer.destroyed && !this.dead) this.later(() => { try { peer.reconnect(); } catch { /* ignore */ } }, 2000); });
     peer.on('error', err => {
       this.fails++;
-      if (this.fails <= 3 || this.fails % 10 === 0) log('direct-error', `${err.type} #${this.fails}`);
+      if (this.fails <= 2 || this.fails % 20 === 0) log('direct-error', `${err.type} #${this.fails}`);
       if (err.type === 'unavailable-id') { try { peer.destroy(); } catch { /* ignore */ } if (this.onTaken && this.onTaken()) return; this.later(() => this.start(), 4000); }
       else if (err.type === 'peer-unavailable') this.later(() => this.dial(), 5000);
       else if (!this.dead) this.later(() => this.kick(), 5000);
@@ -130,7 +129,7 @@ class PeerChannel {
       pc.__dv = true;
       pc.addEventListener('iceconnectionstatechange', () => {
         const st = pc.iceConnectionState;
-        log('direct-ice', st);
+        if (st !== 'checking' && st !== 'new' && st !== 'completed') log('direct-ice', st);
         // PeerJS keeps a dead line marked as open – hang up ourselves so that we redial
         if (st === 'failed' || st === 'closed') this.drop(conn);
         else if (st === 'disconnected') setTimeout(() => { if (pc.iceConnectionState === 'disconnected') this.drop(conn); }, 4000);
@@ -168,7 +167,7 @@ class PeerChannel {
     setTimeout(() => {
       if (conn === this.out && !conn.open) {
         this.fails++;
-        if (this.fails <= 3 || this.fails % 10 === 0) log('direct-timeout', `ice=${conn.peerConnection ? conn.peerConnection.iceConnectionState : '?'} #${this.fails}`);
+        if (this.fails <= 2 || this.fails % 20 === 0) log('direct-timeout', `ice=${conn.peerConnection ? conn.peerConnection.iceConnectionState : '?'} #${this.fails}`);
         this.out = null; try { conn.close(); } catch { /* ignore */ }
         this.later(() => this.dial(), Math.min(4000 * this.fails, 30000));
       }

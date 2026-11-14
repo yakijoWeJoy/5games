@@ -282,11 +282,12 @@ export default {
         ui.aim = { r, c }; rerender();
       },
     }));
-    if (myTurn) {
+    if (!g.over) {
+      // the button always keeps its place, so the boards do not move when the turn changes
       root.append(h('div', { class: 'center' }, h('button', {
-        class: 'btn marker', disabled: !ui.aim,
+        class: 'btn marker', disabled: !myTurn || !ui.aim, 'data-log': 'fire',
         onclick: () => { const { r, c } = ui.aim; ui.aim = null; send({ k: 'shot', r, c }); },
-      }, ui.aim ? `אש על ${coord(ui.aim.r, ui.aim.c)}! 💥` : 'בוחרים משבצת לירות')));
+      }, !myTurn ? `מחכים ל${names[other]}…` : ui.aim ? `אש על ${coord(ui.aim.r, ui.aim.c)}! 💥` : 'בוחרים משבצת לירות')));
     }
 
     const mine = g.layouts[me];

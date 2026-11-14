@@ -63,9 +63,12 @@ async function turnOf(A, B, want) {
   }
   throw new Error('could not hand the turn over');
 }
+// the series is played in order, so the tests use a test-only shortcut straight to the dots game (host only)
+const startDots = host => host.evaluate(() => window.__dv.act({ k: 'jump', game: 'dots' }));
 async function newCtx() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   if (!CFG) await ctx.addInitScript(() => { window.__dvLogTopic = 'dv5g-selftest-ci'; }); // keep test runs out of the real log
+  await ctx.addInitScript(() => { window.__dvTest = true; });
   if (CFG) await ctx.addInitScript(cfg => { window.__dvBrokers = cfg.brokers; if (cfg.noDirect) window.__dvNoDirect = true; }, CFG);
   return ctx;
 }
@@ -99,7 +102,7 @@ async function scenario(name, fn) {
 
   await scenario('01 join + start a game', async () => {
     await linked(B); await linked(A);
-    await A.click('.game-row >> nth=3');
+    await startDots(A);
     await B.waitForSelector('.dots-svg');
     await move(A, B); await move(A, B);
   });
@@ -220,7 +223,7 @@ async function scenario(name, fn) {
       n.send({ t: 'act', id: 'stale-1', a: { k: 'g', gid: 'not-this-game', a: { k: 'line', o: 'h', r: 0, c: 0 } } });
       n.send({ t: 'act', id: 'junk-1', a: null });
       n.send({ t: 'act' }); n.send('boo'); n.send(42); n.send([]); for (const c of n.channels) { c.send('not json'); c.send('{"i":"x1","r":"g","f":"zz","d":{"t":"act","a":{"k":"menu"}}}'); c.send('{"i":"x2","r":"g","f":"zz","k":"wrong-token","d":{"t":"act","a":{"k":"menu"}}}'); } n.send({ t: 'state', s: { rev: 999 } }); n.send({ t: 'hello' });
-      n.send({ t: 'act', id: 'pick-stale', a: { k: 'pick', game: 'bull', from: 'old-game' } });
+      n.send({ t: 'act', id: 'next-stale', a: { k: 'next', from: 'old-game' } }); n.send({ t: 'act', id: 'ns-stale', a: { k: 'newSeries', n: 99 } });
     });
     await sleep(1200);
     s = await same(A, B);
@@ -241,14 +244,14 @@ async function scenario(name, fn) {
   });
 
   await scenario('12 "replace partner": the new phone gets in, the old one is told the page is full', async () => {
-    await A.click('text=☰ תפריט'); await A.click('text=כן, לתפריט');
+    await A.click('button[data-log="to-table"]'); await A.click('text=כן, לטבלה');
     await A.click('text=החלפת שותף'); await A.click('.modal >> text=כן');
     await C.click('button:has-text("לנסות שוב")');
     await linked(C);
     await B.waitForFunction(() => window.__dv.link === 'full', null, { timeout: LINK_T });
     const s = await same(A, C);
     if (s.players[1].name !== 'פולש') throw new Error('new partner not registered');
-    await C.click('.game-row >> nth=3'); await A.waitForSelector('.dots-svg');
+    await startDots(A); await A.waitForSelector('.dots-svg');
     await move(A, C); await move(A, C);
     await sleep(6000); // the old phone must stay out
     if (await B.evaluate(() => window.__dv.link) !== 'full') throw new Error('old phone came back');
@@ -297,7 +300,7 @@ async function scenario(name, fn) {
     await D2.waitForSelector('text=הוזמנת לשחק'); // must NOT resume as a second host
     await D2.fill('input.paper', 'לשונית2'); await D2.click('text=הצטרפות ✏️');
     await linked(D2); await linked(D1);
-    await D1.click('.game-row >> nth=3'); await D2.waitForSelector('.dots-svg');
+    await startDots(D1); await D2.waitForSelector('.dots-svg');
     await move(D1, D2);
     await D2.reload(); await linked(D2); await linked(D1);
     await D1.reload(); await linked(D1); await linked(D2);

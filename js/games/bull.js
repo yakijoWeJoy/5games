@@ -21,19 +21,19 @@ function sync(g) {
 }
 function saveScratch() { try { sessionStorage.setItem('bull-scratch-' + ui.id, JSON.stringify(ui.scratch)); } catch { /* ignore */ } }
 
-function entryBox(rerender, onSubmit, submitLabel) {
+function entryBox(rerender, onSubmit, submitLabel, off) {
   const slots = h('div', { class: 'slots' },
     [0, 1, 2, 3].map(i => h('div', { class: 'slot ink-me' }, ui.entry[i] || '')));
   const keys = h('div', { class: 'keys', style: { gridTemplateColumns: 'repeat(5, 1fr)', direction: 'ltr' } });
   for (const d of '1234567890') {
     keys.append(h('button', {
-      class: 'key', disabled: ui.entry.includes(d) || ui.entry.length >= 4,
+      class: 'key', disabled: off || ui.entry.includes(d) || ui.entry.length >= 4,
       onclick: () => { ui.entry += d; rerender(); },
     }, d));
   }
   keys.append(
-    h('button', { class: 'key wide', disabled: !ui.entry, onclick: () => { ui.entry = ui.entry.slice(0, -1); rerender(); } }, '⌫ מחק'),
-    h('button', { class: 'key wide action', disabled: ui.entry.length !== 4, onclick: onSubmit, style: { gridColumn: 'span 3' } }, submitLabel));
+    h('button', { class: 'key wide', disabled: off || !ui.entry, onclick: () => { ui.entry = ui.entry.slice(0, -1); rerender(); } }, '⌫ מחק'),
+    h('button', { class: 'key wide action', disabled: off || ui.entry.length !== 4, onclick: onSubmit, style: { gridColumn: 'span 3' } }, submitLabel));
   return [slots, keys];
 }
 
@@ -122,11 +122,13 @@ export default {
     root.append(h('div', { class: 'center soft' }, 'הקוד הסודי שלי: ',
       h('b', { style: { color: myInk, letterSpacing: '4px', direction: 'ltr', display: 'inline-block' } }, g.secrets[me])));
 
-    if (g.turn === me && !g.over) {
+    if (!g.over) {
+      // the keypad stays in place (greyed out) while the other player thinks, so the page does not move
+      const myTurn = g.turn === me;
       root.append(...entryBox(rerender, () => {
         if (g.guesses[me].some(x => x.code === ui.entry)) { toast('את הניחוש הזה כבר ניסית 🙂'); ui.entry = ''; rerender(); return; }
         send({ k: 'guess', code: ui.entry }); ui.entry = '';
-      }, 'בדוק! 🎯'));
+      }, myTurn ? 'בדוק! 🎯' : `מחכים ל${names[other]}…`, !myTurn));
       root.querySelectorAll('.slot').forEach(el => { el.style.color = myInk; });
     }
 

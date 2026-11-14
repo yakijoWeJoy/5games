@@ -4,7 +4,7 @@
  * secret codes or words. Batches are posted to a write-only style topic on ntfy.sh so that problems
  * seen on real phones can be investigated afterwards. Read with: tools/logs.sh
  */
-export const VERSION = '2.0';
+export const VERSION = '2.1';
 const TOPIC = (typeof window !== 'undefined' && window.__dvLogTopic) || 'dv5g-logs-k7q2m9x4t1';
 const URL_ = 'https://ntfy.sh/' + TOPIC;
 const params = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
@@ -59,7 +59,7 @@ export function log(ev, data, urgent) {
   if (!ENABLED) return;
   pending.push(line);
   if (pending.length > 400) pending.splice(0, pending.length - 400);
-  schedule(urgent ? 1500 : 12000);
+  schedule(urgent ? 1500 : 30000);
 }
 
 function schedule(ms) {

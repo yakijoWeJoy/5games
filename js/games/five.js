@@ -151,9 +151,10 @@ function paint() {
   d.svg.replaceChildren(...kids);
 
   d.names.replaceChildren(h('b', { class: 'ink0' }, '✕ ' + ctx.names[0]), '  ', h('b', { class: 'ink1' }, '◯ ' + ctx.names[1]));
-  d.confirmRow.style.display = myTurn ? '' : 'none';
-  d.confirm.disabled = ui.sel == null;
-  d.confirm.textContent = ui.sel == null ? 'לוחצים על משבצת' : 'לסמן כאן ✓ (או לחיצה נוספת)';
+  // the row always keeps its place, so nothing on the page moves when the turn changes
+  d.confirmRow.style.display = g.over ? 'none' : '';
+  d.confirm.disabled = !myTurn || ui.sel == null;
+  d.confirm.textContent = !myTurn ? `מחכים ל${ctx.names[ctx.other]}…` : ui.sel == null ? 'לוחצים על משבצת' : 'לסמן כאן ✓ (או לחיצה נוספת)';
 
   // first paint: open the sheet on the action; later: slide to a new mark that is out of sight
   const first = ui.seenLast === undefined;
