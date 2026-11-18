@@ -10,6 +10,15 @@ const st = p => p.evaluate(() => JSON.parse(JSON.stringify(window.__dv.state)));
 const pick = a => a[Math.floor(Math.random() * a.length)];
 let reloads = 0;
 
+// the "how to play" card opens the first time each game is played on a phone; a player reads it and taps "got it"
+let helpsClosed = 0;
+async function dismissHelp(...pages) {
+  for (const p of pages) {
+    try {
+      if (await p.$('.help-card')) { await p.click('.help-card >> text=הבנתי'); helpsClosed++; }
+    } catch (e) { /* page is reloading */ }
+  }
+}
 async function settle(A, B) {
   const t0 = Date.now();
   for (;;) {
@@ -160,6 +169,7 @@ const drivers = {
           break;
         }
         if (++steps > 500) throw new Error(id + ' does not end');
+        await dismissHelp(A, B);
         await drivers[id](A, B, s);
         const rev = s.rev; const t0 = Date.now();
         while ((await st(A)).rev === rev) {
@@ -187,6 +197,8 @@ const drivers = {
   }
   const tallyA = await A.$$eval('.tally path', els => els.length), tallyB = await B.$$eval('.tally path', els => els.length);
   if (tallyA !== tallyB || !tallyA) throw new Error('evening tally marks differ between phones');
+  // each phone saw each game's card exactly once (5 games x 2 phones), however often it reloaded
+  if (helpsClosed !== 10) throw new Error(`"how to play" was closed ${helpsClosed} times, expected 10`);
   console.log(`played ${played} games (+${replays} replays) with ${reloads} random reloads`);
   console.log('script errors:', errs.length ? '\n' + errs.join('\n') : 'none');
   await browser.close();

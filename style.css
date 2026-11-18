@@ -381,3 +381,61 @@ div.game-row { cursor: default; }
 .turn { min-height: 58px; display: flex; align-items: center; justify-content: center; line-height: 1.3; }
 .word-entry { min-height: 66px; display: flex; align-items: center; justify-content: center; }
 .word-entry .word { margin: 0; }
+
+/* ---------- whose turn: the pencil goes from hand to hand ---------- */
+.turn { position: relative; padding-left: 44px; padding-right: 12px; gap: 8px; border-radius: 6px; transition: background .25s, color .25s; }
+.turn .turn-txt { min-width: 0; }
+.turn.mine {
+  font-size: 20px; font-weight: 700; color: var(--me-ink, var(--pencil));
+  background: linear-gradient(100deg, transparent 1%, var(--marker) 3%, var(--marker) 96%, transparent 99%);
+  box-shadow: inset 0 0 0 2.5px var(--me-ink, var(--pencil));
+  animation: wiggle 1.6s ease-in-out 1, turnpop .45s cubic-bezier(.2,1.6,.4,1) 1;
+}
+.turn.mine .turn-ico { font-size: 22px; flex: none; }
+@keyframes turnpop { from { transform: scale(.92); } to { transform: scale(1); } }
+.turn.wait { color: var(--pencil-soft); font-weight: 400; background: rgba(0,0,0,.035); box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.12); }
+.turn-pencil { display: inline-block; font-size: 20px; flex: none; animation: scribble 1.1s ease-in-out infinite; transform-origin: 30% 80%; }
+@keyframes scribble { 0%,100% { transform: translate(0,0) rotate(-8deg); } 25% { transform: translate(3px,-1px) rotate(4deg); } 50% { transform: translate(-2px,1px) rotate(-4deg); } 75% { transform: translate(2px,1px) rotate(6deg); } }
+.help-btn {
+  position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; border-radius: 50%; padding: 0;
+  border: 2px solid currentColor; background: rgba(255,255,255,.7);
+  font-weight: 700; font-size: 17px; color: var(--pencil); line-height: 1;
+}
+/* while the other player thinks, the board steps back a little */
+.body-slot.wait { opacity: .62; transition: opacity .3s; }
+.body-slot { transition: opacity .3s; }
+/* a frame around the whole page in my pen colour while it is my turn */
+body.my-turn::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 25;
+  border: 4px solid var(--me-ink, var(--pencil)); opacity: .55;
+  animation: framein .9s ease-out 1;
+}
+@keyframes framein { 0% { opacity: 0; border-width: 12px; } 40% { opacity: .9; } 100% { opacity: .55; border-width: 4px; } }
+.ptag.holder { background: linear-gradient(100deg, transparent 2%, var(--marker) 6%, var(--marker) 94%, transparent 98%); padding: 0 3px; border-radius: 3px; }
+.holder-ico { font-size: 13px; }
+.sound-btn { font-size: 17px; }
+/* how to play */
+.help-card { text-align: right; }
+.help-card h3 { text-align: center; }
+.help-list { margin: 8px 0 14px; padding-right: 20px; font-size: 16px; line-height: 1.55; }
+.help-list li { margin-bottom: 6px; }
+.help-card .btn { display: flex; margin: 0 auto; }
+.help-foot { font-size: 13px; text-align: center; margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .turn.mine, .turn-pencil, body.my-turn::after { animation: none; }
+}
+/* phones: the top bar shows icons only (☰ ✉️ 🔔), so the names keep their room */
+@media (max-width: 480px) {
+  .top-btns .lbl { display: none; }
+  .top-btns { gap: 4px; }
+  .top-btns .icon-btn { min-width: 38px; padding: 4px 6px; }
+}
+/* the banner always has the same height (two lines at most), so the board below never moves */
+.turn { height: 64px; min-height: 64px; overflow: hidden; margin: 6px 0 10px; }
+.turn .turn-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
+@media (max-width: 380px) {
+  .turn.mine { font-size: 17px; }
+  .turn.wait { font-size: 15px; }
+  .turn .turn-ico, .turn-pencil { font-size: 17px; }
+}

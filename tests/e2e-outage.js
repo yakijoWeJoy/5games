@@ -36,7 +36,7 @@ async function move(A, B) {
   const errs = [];
   const mk = async name => {
     const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    await c.addInitScript(ports => { window.__dvBrokers = ports.map((port, i) => ({ name: 't' + i, host: 'localhost', port, path: '/', ssl: false })); window.__dvNoDirect = true; window.__dvTest = true; }, [P1, P2]);
+    await c.addInitScript(ports => { window.__dvBrokers = ports.map((port, i) => ({ name: 't' + i, host: 'localhost', port, path: '/', ssl: false })); window.__dvNoDirect = true; window.__dvTest = true; window.__dvNoHelp = true; }, [P1, P2]);
     const p = await c.newPage();
     p.on('pageerror', e => errs.push(name + ': ' + e.message));
     return p;

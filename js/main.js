@@ -1,5 +1,6 @@
 import { h, toast, confirmBox, tally, buzz, rid } from './ui.js';
 import { Link, LOCAL } from './net.js';
+import { play, soundOn, setSound } from './sound.js';
 import { log, flush as flushLog, setLogContext, dev as logDev, ring as logRing, VERSION } from './log.js';
 import { GAMES, BY, STATE_V, NEED, cleanName, newState, reduce, seriesWins, seriesDone, seriesDecided, seriesLeader, nextGame } from './core.js';
 
@@ -42,6 +43,9 @@ let unread = 0;
 let outbox = [];        // guest: actions sent but not yet confirmed by the host
 let outboxTimer = null;
 let loggedOver = null;
+let lastOverKey = null;
+let stateSeen = false;
+let helpEl = null;
 let lastView = null;
 let techOpen = false;
 const DEMO = params.has('demo'); // canned screens for visual tests, no network
@@ -124,7 +128,7 @@ function startNet() {
         const first = !s.players[1].token;
         s.players[1] = { name: cleanName(d.name), token: d.token };
         commit(s);
-        if (first) { toast(`${s.players[1].name} הצטרף/ה לדף! ✏️`); buzz([40, 60, 40]); }
+        if (first) { toast(`${s.players[1].name} הצטרף/ה לדף! ✏️`); buzz([40, 60, 40]); play('join'); }
       },
       onMessage: d => {
         if (d.t !== 'act') return;
@@ -199,6 +203,7 @@ function onState() {
     seenChat.add(m.id);
     if (m.p !== me) {
       buzz([30, 40, 30]);
+      play('note');
       if (!chatOpen) { unread++; toast(m.text, `✉️ פתק מ${state.players[m.p].name}`, 3800); }
     }
   }
@@ -207,17 +212,90 @@ function onState() {
   if (prevGameKey !== undefined && prevGameKey !== null && key === null && state.leftBy !== me) {
     toast(`${state.players[1 - me].name} חזר/ה לתפריט`);
   }
-  if (key !== prevGameKey && key) log('game-start', state.current);
+  const newGame = key !== prevGameKey && !!key;
+  if (newGame) log('game-start', state.current);
   if (state.game && state.game.over && loggedOver !== key) { loggedOver = key; log('game-over', `${state.current} ${state.game.over.winner === null ? 'tie' : state.game.over.winner === me ? 'me' : 'other'}`); }
   prevGameKey = key;
   // my turn?
   let mine = false;
   if (state.game && !state.game.over) mine = BY[state.current].status(state.game, ctxFor()).mine;
-  if (mine && prevMyTurn === false) buzz(60);
+  if (mine && prevMyTurn === false) { buzz(60); play('turn'); }
   prevMyTurn = mine;
+  // end of a game: a short tune (not when the page is just opened on a finished game)
+  const overKey = state.game && state.game.over ? key : null;
+  if (stateSeen && overKey && overKey !== lastOverKey) {
+    const w = state.game.over.winner;
+    play(w == null ? 'tie' : w === me ? 'win' : 'lose');
+  }
+  lastOverKey = overKey;
+  stateSeen = true;
 
   render();
   renderChat();
+  // first time this phone plays this game: a short "how to play"
+  if (newGame && !state.game.over) maybeHelp(BY[state.current]);
+  else if (!state.game && helpEl) closeHelp();
+}
+
+/* ======================= turn indicator ======================= */
+
+/** who holds the pencil right now: me | other | null (both act at once, or no game) */
+function turnInfo(ctx) {
+  if (!state || !state.game || state.game.over) return { mine: false, holder: null, st: null };
+  const G = BY[state.current], g = state.game;
+  const st = G.status(g, ctx);
+  const together = g.phase === 'secret' || g.phase === 'word' || g.phase === 'place';
+  return { mine: st.mine, holder: together ? null : st.mine ? me : 1 - me, st };
+}
+
+function applyTurnLook(ti) {
+  const b = document.body;
+  b.style.setProperty('--me-ink', `var(--ink${me})`);
+  b.classList.toggle('my-turn', !!ti.st && ti.mine);
+  b.classList.toggle('their-turn', !!ti.st && !ti.mine);
+  const want = ti.st && ti.mine ? '✏️ תורך! · דף ועיפרון' : 'דף ועיפרון';
+  if (document.title !== want) document.title = want;
+}
+
+function turnBanner(G, ctx, ti) {
+  const help = h('button', { class: 'help-btn', 'data-log': 'help', 'aria-label': 'איך משחקים?', title: 'איך משחקים?', onclick: () => showHelp(G, false) }, '?');
+  if (ti.mine) {
+    return h('div', { class: 'turn mine', role: 'status' },
+      h('span', { class: 'turn-ico' }, '✏️'), h('span', { class: 'turn-txt' }, ti.st.text), help);
+  }
+  return h('div', { class: 'turn wait', role: 'status' },
+    h('span', { class: 'turn-pencil', 'aria-hidden': 'true' }, '✎'), h('span', { class: 'turn-txt' }, ti.st.text), help);
+}
+
+/* ======================= how to play ======================= */
+
+function helpSeen(id) { return !!store.get('help:' + id, false); }
+
+function maybeHelp(G) {
+  if (window.__dvNoHelp) return;
+  if (DEMO ? !params.has('help') : helpSeen(G.id)) return;
+  showHelp(G, true);
+}
+
+function closeHelp() { if (helpEl) { helpEl.remove(); helpEl = null; } }
+
+function showHelp(G, auto) {
+  closeHelp();
+  const t0 = Date.now();
+  log('help', `${G.id} ${auto ? 'auto' : 'asked'}`);
+  const done = () => {
+    store.set('help:' + G.id, true);
+    log('help-ok', `${G.id} ${Math.round((Date.now() - t0) / 1000)}s`);
+    closeHelp();
+  };
+  helpEl = h('div', { class: 'modal-bg help-bg' },
+    h('div', { class: 'modal card help-card', role: 'dialog', 'aria-label': 'איך משחקים ' + G.title },
+      h('h3', {}, `איך משחקים ${G.title}?`),
+      h('ul', { class: 'help-list' }, (G.help || []).map(l => h('li', { html: l }))),
+      h('button', { class: 'btn marker', 'data-log': 'help-ok', onclick: done }, 'הבנתי ✓'),
+      auto ? h('div', { class: 'soft help-foot' }, 'אפשר לפתוח שוב בכל רגע עם ה-? למעלה') : null));
+  helpEl.addEventListener('click', e => { if (e.target === helpEl) done(); });
+  document.body.append(helpEl);
 }
 
 /* ======================= rendering ======================= */
@@ -242,8 +320,10 @@ function render() {
     G = BY[state.current];
     if (link !== 'linked') top.push(connNote());
     if (state.game.over) top.push(resultCard(G, ctx));
-    else { const st = G.status(state.game, ctx); top.push(h('div', { class: 'turn' + (st.mine ? ' mine' : '') }, st.text)); }
+    else top.push(turnBanner(G, ctx, turnInfo(ctx)));
   }
+  const ti = turnInfo(ctx);
+  applyTurnLook(ti);
   // keep the keyboard open if the player was typing while an update arrived
   const act0 = document.activeElement;
   const fk = act0 && app.contains(act0) && act0.dataset ? act0.dataset.fk : null;
@@ -251,7 +331,7 @@ function render() {
   topEl.replaceChildren(...top);
   if (inGame) {
     if (bodyEl.dataset.gid !== state.game.id) { bodyEl.replaceChildren(); bodyEl.dataset.gid = state.game.id; window.scrollTo(0, 0); }
-    bodyEl.className = 'body-slot game';
+    bodyEl.className = 'body-slot game' + (ti.st && !ti.mine ? ' wait' : '');
     G.render(bodyEl, state.game, ctx);
   } else {
     bodyEl.dataset.gid = '';
@@ -269,7 +349,9 @@ function header(ctx) {
   const sw = seriesWins(state);
   const total = p => sw[p];
   const online = link === 'linked';
-  const tag = p => h('div', { class: `ptag p${p}${p === me ? ' me' : ''}` },
+  const holder = turnInfo(ctx).holder;
+  const tag = p => h('div', { class: `ptag p${p}${p === me ? ' me' : ''}${p === holder ? ' holder' : ''}` },
+    p === holder ? h('span', { class: 'holder-ico', title: 'העיפרון אצל ' + (state.players[p].name || '') }, '✏️') : null,
     p !== me ? h('span', { class: 'dot' + (online ? ' on' : ''), title: online ? 'מחובר' : 'לא מחובר' }) : null,
     h('span', { class: 'pname' }, state.players[p].name || '…'),
     h('span', { class: 'ptot' }, total(p)));
@@ -279,7 +361,11 @@ function header(ctx) {
       state.current
         ? h('button', { class: 'icon-btn', 'data-log': 'to-table', onclick: leaveGame }, '☰', h('span', { class: 'lbl' }, ' טבלה'))
         : h('div', { class: 'logo' }, 'דף ועיפרון'),
-      joined ? h('button', { class: 'icon-btn chat-btn', 'data-log': 'chat', onclick: openChat }, '✏️', h('span', { class: 'lbl' }, ' פתק'), unread ? h('span', { class: 'badge' }, unread) : null) : null),
+      joined ? h('button', { class: 'icon-btn chat-btn', 'data-log': 'chat', onclick: openChat }, '✉️', h('span', { class: 'lbl' }, ' פתק'), unread ? h('span', { class: 'badge' }, unread) : null) : null,
+      joined ? h('button', {
+        class: 'icon-btn sound-btn', 'data-log': soundOn() ? 'sound-off' : 'sound-on', 'aria-label': soundOn() ? 'השתקת צלילים' : 'הפעלת צלילים',
+        onclick: () => { setSound(!soundOn()); toast(soundOn() ? 'צלילים פועלים 🔔' : 'צלילים כבויים 🔕'); if (soundOn()) play('turn'); render(); },
+      }, soundOn() ? '🔔' : '🔕') : null),
     h('div', { class: 'players' }, tag(0), h('span', { class: 'vs' }, 'נגד'), tag(1)));
 }
 
@@ -669,6 +755,8 @@ function leaveRoom() {
   session = null; state = null; seenChat = null; prevGameKey = null; link = 'waiting';
   setLogContext('');
   closeChat();
+  closeHelp();
+  applyTurnLook({ mine: false, holder: null, st: null });
   const u = new URL(location.href);
   u.searchParams.delete('room');
   history.replaceState(null, '', u.pathname + u.search);
@@ -745,5 +833,5 @@ async function boot() {
   homeView(room || null);
 }
 // small handle for automated tests / debugging in the console
-window.__dv = { get net() { return net; }, get state() { return state; }, get link() { return link; }, get session() { return session; }, get outbox() { return outbox; }, get log() { return logRing; }, act };
+window.__dv = { get net() { return net; }, get state() { return state; }, get link() { return link; }, get session() { return session; }, get outbox() { return outbox; }, get log() { return logRing; }, act, get sounds() { return window.__dvSounds || []; } };
 boot();

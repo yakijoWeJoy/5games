@@ -4,7 +4,7 @@
  * secret codes or words. Batches are posted to a write-only style topic on ntfy.sh so that problems
  * seen on real phones can be investigated afterwards. Read with: tools/logs.sh
  */
-export const VERSION = '2.2';
+export const VERSION = '2.3';
 const TOPIC = (typeof window !== 'undefined' && window.__dvLogTopic) || 'dv5g-logs-k7q2m9x4t1';
 const URL_ = 'https://ntfy.sh/' + TOPIC;
 const params = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
@@ -28,6 +28,7 @@ export const dev = (() => {
 })();
 const run = Math.random().toString(36).slice(2, 5); // one page load
 
+let foreignErrors = 0;
 export const ring = [];      // last lines, shown in the on-screen "technical details"
 let pending = [];
 let timer = null;
@@ -95,13 +96,18 @@ if (typeof window !== 'undefined') {
     w: window.innerWidth, h: window.innerHeight, standalone: !!(nav.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches)),
     ref: document.referrer ? new URL(document.referrer).hostname : '', q: [...params.keys()].join(','),
   }, true);
-  window.addEventListener('error', e => log('js-error', `${e.message} @${(e.filename || '').split('/').pop()}:${e.lineno}`, true));
+  window.addEventListener('error', e => {
+    // errors from scripts the browser itself injects (e.g. the Brave wallet) are not ours: count them, do not log each
+    const file = (e.filename || '').split('/').pop();
+    if ((!file && /^Script error/.test(e.message || '')) || /ethereum|solana|__gCrWeb|webkit\.messageHandlers/.test(e.message || '')) { foreignErrors++; return; }
+    log('js-error', `${e.message} @${file}:${e.lineno}`, true);
+  });
   window.addEventListener('unhandledrejection', e => log('js-reject', String(e.reason && (e.reason.message || e.reason)).slice(0, 200), true));
   window.addEventListener('online', () => log('online', null, true));
   window.addEventListener('offline', () => log('offline', null, true));
   document.addEventListener('visibilitychange', () => {
     log('vis', document.visibilityState);
-    if (document.visibilityState === 'hidden') flush(true);
+    if (document.visibilityState === 'hidden') { if (foreignErrors) { log('foreign-errors', foreignErrors); foreignErrors = 0; } flush(true); }
   });
   window.addEventListener('pagehide', () => { log('pagehide'); flush(true); });
   // which buttons people press (never keyboard keys / board cells, which could reveal a secret)

@@ -144,6 +144,12 @@ export default {
   id: 'ships',
   title: 'צוללות',
   sub: 'לוח 6×6 · צוללות 2, 3, 4 וצוללת ן · אסור שייגעו',
+  help: [
+    'כל אחד מסדר 4 צוללות על הלוח שלו: 2, 3, 4 משבצות וצוללת בצורת ן. צוללות לא נוגעות זו בזו, גם לא באלכסון.',
+    'יורים בתורות על הלוח של השני: לחיצה בוחרת משבצת, לחיצה שנייה יורה.',
+    'פגיעה = <b>עוד ירייה</b>. החטאה = התור עובר.',
+    'מי שמטביע ראשון את כל הצוללות של השני מנצח.',
+  ],
 
   init(starter) {
     return { starter, turn: starter, phase: 'place', layouts: [null, null], shots: [[], []], sunk: [[], []], last: null, over: null };
@@ -187,12 +193,13 @@ export default {
     }
     let t = '';
     if (g.last) {
-      const who = g.last.p === me ? 'ירית' : `${names[other]} ירה/תה`;
-      const res = g.last.res === 'sunk' ? `טביעה!! ${DEF[g.last.ship].name} 🌊` : g.last.res === 'hit' ? 'פגיעה! 💥' : 'החטאה';
-      t = `${who} ב${coord(g.last.r, g.last.c)} – ${res} · `;
+      // short enough for two lines on the smallest phones
+      const who = g.last.p === me ? 'ירית ב' : `${names[other]}: `;
+      const res = g.last.res === 'sunk' ? `טביעה! ${DEF[g.last.ship].name} 🌊` : g.last.res === 'hit' ? 'פגיעה! 💥' : 'החטאה';
+      t = `${who}${coord(g.last.r, g.last.c)} – ${res} · `;
     }
     const again = g.last && g.last.res !== 'miss';
-    if (g.turn === me) return { mine: true, text: t + (again ? 'עוד תור! 🎯' : 'תורך לירות 🎯') };
+    if (g.turn === me) return { mine: true, text: t + (again ? 'עוד תור! 🎯' : 'תורך! 🎯') };
     return { mine: false, text: t + (again ? `${names[other]} ממשיך/ה…` : `התור של ${names[other]}`) };
   },
 

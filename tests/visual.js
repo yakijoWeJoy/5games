@@ -27,7 +27,7 @@ const DEVICES = [
   { name: 'ultrawide-3440 (as seen in the logs)', w: 3440, h: 1440, dpr: 1, mobile: false },
 ];
 const SCENES = ['home', 'join', 'invite', 'menu', 'menu-mid', 'bull-secret', 'bull-play', 'bull-over', 'hangman-word', 'hangman-play',
-  'ships-place', 'ships-play', 'dots', 'five', 'five-many', 'five-over', 'decided', 'decided-menu', 'done-menu', 'lost'];
+  'ships-place', 'ships-play', 'dots', 'five', 'five-many', 'five-over', 'bull-play+help', 'hangman-play+help', 'ships-play+help', 'dots+help', 'five+help', 'decided', 'decided-menu', 'done-menu', 'lost'];
 
 const CHECK = () => {
   const issues = [];
@@ -81,6 +81,27 @@ const CHECK = () => {
     const want = window.__dv.state.game.cells.filter(x => x >= 0).length;
     if (n !== want) issues.push(`five: ${n} marks painted for ${want} marks in the game`);
   }
+  // whose turn: banner, page frame, dimmed board and header pencil must all tell the same story
+  const st = window.__dv && window.__dv.state;
+  if (st && st.game && !st.game.over && document.querySelector('.turn')) {
+    const mineBanner = !!document.querySelector('.turn.mine'), waitBanner = !!document.querySelector('.turn.wait');
+    if (mineBanner === waitBanner) issues.push('turn banner is neither "mine" nor "wait"');
+    if (document.body.classList.contains('my-turn') !== mineBanner) issues.push('page frame does not match the banner');
+    if (!!document.querySelector('.body-slot.wait') !== waitBanner) issues.push('dimmed board does not match the banner');
+    if (mineBanner && !document.title.startsWith('✏️')) issues.push('tab title does not say it is my turn');
+    if (!mineBanner && document.title.startsWith('✏️')) issues.push('tab title says my turn but it is not');
+    const holder = document.querySelector('.ptag.holder');
+    if (holder && holder.classList.contains('me') !== mineBanner) issues.push('header pencil is next to the wrong player');
+    if (!document.querySelector('.help-btn')) issues.push('no "?" button');
+    const tb = document.querySelector('.turn .turn-txt');
+    if (tb && tb.scrollHeight > tb.clientHeight + 2) issues.push('turn text is cut off: "' + tb.textContent.slice(0, 30) + '"');
+  }
+  const hc = document.querySelector('.help-card');
+  if (hc) {
+    const r = hc.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight + 1) issues.push(`"how to play" card does not fit on the screen (${Math.round(r.top)}..${Math.round(r.bottom)} of ${window.innerHeight})`);
+    if (hc.querySelectorAll('li').length < 3) issues.push('"how to play" card has no text');
+  }
   return [...new Set(issues)].slice(0, 8);
 };
 
@@ -97,14 +118,15 @@ const ONLY = process.env.SCENES ? process.env.SCENES.split(',') : null; // e.g. 
     page.on('pageerror', e => errs.push(e.message));
     const tag = d.name.split(' ')[0];
     for (const sc of SCENES) {
-      if (ONLY && !ONLY.includes(sc)) continue;
+      if (ONLY && !ONLY.includes(sc) && !ONLY.includes(sc.split('+')[0])) continue;
       for (const me of sc === 'home' || sc === 'join' || sc === 'invite' ? [0] : [0, 1]) {
         total++;
-        await page.goto(`${BASE}?demo=${sc}&me=${me}`);
+        const [scene, extra] = sc.split('+');
+        await page.goto(`${BASE}?demo=${scene}&me=${me}${extra ? '&' + extra + '=1' : ''}`);
         await page.waitForTimeout(350);
         const issues = await page.evaluate(CHECK);
         if (errs.length) issues.push('script error: ' + errs.splice(0).join(' | '));
-        await page.screenshot({ path: path.join(OUT, `${tag}__${sc}__p${me}.png`), fullPage: true });
+        await page.screenshot({ path: path.join(OUT, `${tag}__${sc.replace('+', '-')}__p${me}.png`), fullPage: true });
         if (issues.length) { bad++; console.log(`✗ ${d.name} / ${sc} (player ${me}):\n    ` + issues.join('\n    ')); }
       }
     }
