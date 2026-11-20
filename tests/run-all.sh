@@ -11,6 +11,7 @@ step() {
 }
 step "game & series rules"            node tests/logic.test.mjs
 step "turn look / sound / help"       tests/with-servers.sh node tests/turn-ui.js
+step "analytics events & privacy"     tests/with-servers.sh node tests/analytics.js
 step "taps land where they should"    tests/with-servers.sh node tests/interact.js
 step "two full series through the UI" tests/with-servers.sh node tests/e2e-games.js http://localhost:8765/ 2
 step "disconnects (relay only)"       env MODE=relay tests/with-servers.sh node tests/e2e-net.js

@@ -2,6 +2,7 @@
 // Fuzzes the shared reducer and all five games: random legal play, garbage input, invariants.
 import assert from 'node:assert/strict';
 import { GAMES, newState, reduce, seriesWins, seriesDecided, seriesDone, nextGame } from '../js/core.js';
+import { gameEvents } from '../js/metrics.js';
 import { SHIPS, randomLayout, validLayout } from '../js/games/ships.js';
 
 let seed = 12345;
@@ -478,6 +479,57 @@ const next = t => { const n = step(t, 0, { k: 'next' }); assert.ok(n, 'next'); r
     assert.equal(q.size, 4, `O in square ${i} is not centred on its square`);
   }
   console.log(`five in a row: all ${N * N} squares checked, marks stay within ${worst.toFixed(1)} of the centre (square edge at ${U / 2})`);
+}
+
+
+// ---------- analytics events derived from state changes ----------
+{
+  const evs = [];
+  let t = fresh(), seen = t;
+  const go = (p, a) => { const n = step(t, p, a); assert.ok(n, JSON.stringify(a)); t = n; };
+  const see = () => { for (const e of gameEvents(seen, t, 0)) evs.push(e); seen = t; };
+  const names = () => evs.map(e => e.event);
+  // game 1: host wins; game 2: abandoned to the menu by the guest; then played and won by guest
+  go(0, { k: 'next', from: null }); see();
+  t = win(t, 0); see();
+  assert.deepEqual(names(), ['game_started', 'game_completed']);
+  const done = evs[1].props;
+  assert.equal(done.game, 'bull'); assert.equal(done.outcome, 'host_won'); assert.equal(done.my_outcome, 'won');
+  assert.equal(done.game_index, 1); assert.ok(done.moves >= 3); assert.equal(done.series_score, '1-0'); assert.equal(done.is_rematch, false);
+  assert.ok(typeof done.duration_s === 'number' && done.duration_s >= 0);
+  go(1, { k: 'replay', from: t.game.id }); see();
+  assert.equal(evs.at(-1).event, 'game_started'); assert.equal(evs.at(-1).props.is_rematch, true);
+  t = win(t, 0); see();
+  go(0, { k: 'next', from: t.game.id }); see();
+  go(1, { k: 'menu', from: t.game.id }); see();
+  const ab = evs.at(-1);
+  assert.equal(ab.event, 'game_abandoned'); assert.equal(ab.props.reason, 'to_menu'); assert.equal(ab.props.left_by, 'guest'); assert.equal(ab.props.game, 'hangman');
+  go(0, { k: 'next', from: null }); see(); t = win(t, 0); see();
+  go(0, { k: 'next', from: t.game.id }); see(); t = win(t, 0); see();
+  assert.equal(evs.filter(e => e.event === 'series_decided').length, 1, 'series decided at 3 wins');
+  const dec = evs.find(e => e.event === 'series_decided').props;
+  assert.equal(dec.winner, 'host'); assert.equal(dec.games_played, 3); assert.equal(dec.score, '3-0');
+  go(0, { k: 'next', from: t.game.id }); see(); t = win(t, 1); see();
+  go(0, { k: 'next', from: t.game.id }); see(); t = win(t, 1); see();
+  const comp = evs.filter(e => e.event === 'series_completed');
+  assert.equal(comp.length, 1); assert.equal(comp[0].props.played_on_after_decided, true); assert.equal(comp[0].props.score, '3-2');
+  go(1, { k: 'newSeries', from: t.game.id, n: 1 }); see();
+  assert.equal(evs.at(-1).event, 'series_started'); assert.equal(evs.at(-1).props.series_n, 2); assert.equal(evs.at(-1).props.previous_finished, true);
+  // a series left in the middle, with a game running
+  go(0, { k: 'next', from: null }); see();
+  go(0, { k: 'newSeries', from: t.game.id, n: 2 }); see();
+  assert.deepEqual(names().slice(-3), ['game_started', 'game_abandoned', 'series_started']);
+  assert.equal(evs.at(-2).props.reason, 'new_series');
+  go(0, { k: 'next', from: null }); see(); t = win(t, 1); see();
+  go(0, { k: 'resetEvening' }); see();
+  assert.deepEqual(names().slice(-2), ['series_abandoned', 'evening_reset']);
+  // the guest's phone sees the same games, from its own side
+  const g = gameEvents(clone(fresh()), clone(fresh()), 1);
+  assert.deepEqual(g, [], 'a different room (other sid) never produces events');
+  // every completed game counted once per phone
+  assert.equal(evs.filter(e => e.event === 'game_completed').length, 7);
+  for (const e of evs) { assert.ok(e.props.room_id); jsonSafe(e); }
+  console.log('analytics: state changes → events checked (' + evs.length + ' events)');
 }
 
 console.log('logic tests passed ✔', counts, 'evening after 60 series:', s.evening);

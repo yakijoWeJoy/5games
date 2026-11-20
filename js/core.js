@@ -48,7 +48,7 @@ export function seriesLeader(s) {
 /** the game that has to be played now, or null when all five are done */
 export const nextGame = s => (seriesDone(s) ? null : GAMES[s.series.results.length].id);
 
-function startGame(s, idx, counts) {
+function startGame(s, idx, counts, replay) {
   const G = GAMES[idx];
   // who opens alternates from game to game and from series to series; a replay keeps the same opener
   const st = (s.series.n + idx) % 2;
@@ -57,6 +57,8 @@ function startGame(s, idx, counts) {
   s.game.id = rid();
   s.game.sidx = counts ? idx : -1;
   s.game.counted = false;
+  // for product analytics: when it started / ended (host clock), how many accepted moves, was it a replay
+  s.game.meta = { t0: Date.now(), t1: null, n: 0, rp: !!replay };
 }
 
 function closeSeries(s) {
@@ -95,7 +97,7 @@ export function reduce(s, p, a, opts) {
       const idx = s.game.sidx;
       if (!(idx >= 0) || idx !== s.series.results.length - 1 || s.series.results[idx].game !== s.current) return false;
       s.series.results.pop();
-      startGame(s, idx, true);
+      startGame(s, idx, true, true);
       return true;
     }
     case 'menu':
@@ -127,8 +129,10 @@ export function reduce(s, p, a, opts) {
       let ok = false;
       try { ok = G.apply(s.game, a.a, p) === true; } catch { ok = false; }
       if (!ok) return false;
+      if (s.game.meta) s.game.meta.n++;
       if (s.game.over && !s.game.counted) {
         s.game.counted = true;
+        if (s.game.meta) s.game.meta.t1 = Date.now();
         if (s.game.sidx === s.series.results.length) s.series.results.push({ game: s.current, winner: s.game.over.winner });
       }
       return true;
