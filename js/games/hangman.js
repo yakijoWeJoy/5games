@@ -137,8 +137,8 @@ export default {
     if (g.turn === me) {
       if (L && L.p === me && L.hit) return { mine: true, text: T(`יש "${L.l}"! עוד תור ✨`, `"${L.l}" is in! Another turn ✨`) };
       let t = '';
-      if (L && L.p === other) t = L.word ? T(`${names[other]} ניסה/תה "${L.word}" – לא! · `, `${names[other]} tried "${L.word}" – no! · `) : T(`${names[other]} שאל/ה "${L.l}" – אין · `, `${names[other]} asked "${L.l}" – not there · `);
-      return { mine: true, text: t + T('תורך לבחור אות', 'Your turn to pick a letter') };
+      if (L && L.p === other) t = L.word ? T(`${names[other]} ניסה/תה "${L.word}" – לא! · `, `${names[other]}: "${L.word}" ✗ · `) : T(`${names[other]} שאל/ה "${L.l}" – אין · `, `${names[other]}: "${L.l}" ✗ · `);
+      return { mine: true, text: t + T('תורך לבחור אות', 'Your turn: pick a letter') };
     }
     if (L && L.p === other && L.hit) return { mine: false, text: T(`${names[other]} מצא/ה "${L.l}" וממשיך/ה…`, `${names[other]} found "${L.l}" and goes again…`) };
     return { mine: false, text: T(`התור של ${names[other]}…`, `${names[other]}\'s turn…`) };

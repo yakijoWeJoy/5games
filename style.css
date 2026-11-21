@@ -416,7 +416,8 @@ body.my-turn::after {
 .holder-ico { font-size: 13px; }
 .sound-btn { font-size: 17px; }
 /* how to play */
-.help-card { text-align: start; }
+.help-card { text-align: start; max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overflow-y: auto; }
+@media (max-height: 480px) { .help-card h3 { margin: 4px 0; } .help-list { font-size: 14px; line-height: 1.4; margin: 4px 0 8px; } .help-list li { margin-bottom: 2px; } }
 .help-card h3 { text-align: center; }
 .help-list { margin: 8px 0 14px; padding-inline-start: 20px; font-size: 16px; line-height: 1.55; }
 .help-list li { margin-bottom: 6px; }
