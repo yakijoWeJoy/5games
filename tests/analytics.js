@@ -124,6 +124,21 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
   check(!JSON.stringify(tt).includes('abc123secret'), 'the TikTok click id itself is not stored');
   await ctx3.close();
 
+  // an Instagram ad click inside Instagram's own browser
+  {
+    const c5 = await browser.newContext({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.40.92 (iPhone14,5; iOS 17_5; he_IL; he; scale=3.00; 1170x2532; 600000000)' });
+    await c5.addInitScript(() => { window.__dvAnalytics = { key: 'phc_test', host: 'https://ph.test' }; });
+    const ig = [];
+    await c5.route('https://ph.test/**', async r => { try { ig.push(...JSON.parse(r.request().postData()).batch); } catch { /* */ } await r.fulfill({ status: 200, body: '{}' }); });
+    const I = await c5.newPage();
+    await I.goto(BASE + '?local=ig&utm_medium=paid&utm_campaign=launch&utm_content=story1&fbclid=IwZXh0bgsecretfb');
+    await I.evaluate(() => window.__dv.flushAnalytics()); await sleep(400);
+    const ipv = ig.find(e => e.event === '$pageview');
+    check(ipv && ipv.properties.$browser === 'In-app (Instagram)' && ipv.properties.utm_source === 'instagram' && ipv.properties.from_meta_click === true && ipv.properties.utm_content === 'story1', 'Instagram ad click: Instagram browser, source instagram, ad name kept');
+    check(!JSON.stringify(ig).includes('secretfb'), 'the Meta click id itself is not stored');
+    await c5.close();
+  }
+
   // a guest phone with a copy of the game saved by an old version (before the series existed) must not crash
   {
     const c4 = await browser.newContext();

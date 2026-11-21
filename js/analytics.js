@@ -82,7 +82,7 @@ function device() {
   const ua = navigator.userAgent || '';
   const ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   const os = /Android/.test(ua) ? 'Android' : /iPhone|iPod/.test(ua) || ipad ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac OS X' : /CrOS/.test(ua) ? 'Chrome OS' : /Linux/.test(ua) ? 'Linux' : 'Other';
-  const browser = /musical_ly|BytedanceWebview|TikTok|trill_/i.test(ua) ? 'In-app (TikTok)' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /FBAN|FBAV|Instagram/.test(ua) ? 'In-app (Facebook/Instagram)' : /WhatsApp/.test(ua) ? 'In-app (WhatsApp)'
+  const browser = /musical_ly|BytedanceWebview|TikTok|trill_/i.test(ua) ? 'In-app (TikTok)' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Instagram/.test(ua) ? 'In-app (Instagram)' : /FBAN|FBAV|FB_IAB/.test(ua) ? 'In-app (Facebook)' : /WhatsApp/.test(ua) ? 'In-app (WhatsApp)'
     : /Edg\//.test(ua) ? 'Microsoft Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'Other';
   const tablet = ipad || (/Android/.test(ua) && !/Mobile/.test(ua));
   const conn = navigator.connection || {};
@@ -217,7 +217,7 @@ const clean = v => String(v || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').sli
 export function campaignSource() {
   let src = ls('dv:asrc');
   if (src) return src;
-  src = clean(params.get('utm_source')) || (params.get('ttclid') ? 'tiktok' : '') || clean(params.get('src'));
+  src = clean(params.get('utm_source')) || (params.get('ttclid') ? 'tiktok' : '') || (params.get('fbclid') ? (/Instagram/.test(navigator.userAgent) ? 'instagram' : 'meta') : '') || clean(params.get('src'));
   if (src) ls('dv:asrc', src);
   return src || '';
 }
@@ -231,6 +231,8 @@ export function trackPageview(entry) {
   for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) if (params.get(k)) utm[k] = params.get(k).slice(0, 80);
   // TikTok adds ttclid to ad clicks; only the fact is kept, not the id
   if (params.get('ttclid')) { utm.from_ad_click = true; if (!utm.utm_source) utm.utm_source = 'tiktok'; }
+  // Meta (Instagram / Facebook) adds fbclid to clicks; again only the fact is kept
+  if (params.get('fbclid')) { utm.from_meta_click = true; if (!utm.utm_source) utm.utm_source = /Instagram/.test(navigator.userAgent) ? 'instagram' : 'meta'; }
   const invitedFrom = clean(params.get('src'));
   if (invitedFrom) utm.invited_from_source = invitedFrom;
   const src = campaignSource();

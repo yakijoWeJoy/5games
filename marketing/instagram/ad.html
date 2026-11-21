@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<!-- Instagram ad, rendered to PNG / MP4 by marketing/instagram/render.js.  ?fmt=story (1080x1920) | feed (1080x1350) -->
+<link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@400;700&family=Playpen+Sans+Hebrew:wght@400;600;800&family=Varela+Round&display=swap" rel="stylesheet">
+<style>
+  :root { --paper: #fbf8ef; --pencil: #3b3a36; --soft: #8a867b; --ink0: #2350b8; --ink1: #c5332b; --marker: #fff09a; --margin: #e58f8f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { width: 1080px; height: 1920px; overflow: hidden; background: var(--paper); color: var(--pencil); font-family: 'Playpen Sans Hebrew', 'Varela Round', sans-serif; position: relative; }
+  body.feed { height: 1350px; }
+  /* squared school paper with the red margin line */
+  .sheet { position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(70,120,190,.16) 2px, transparent 2px), linear-gradient(90deg, rgba(70,120,190,.16) 2px, transparent 2px);
+    background-size: 54px 54px; background-position: -2px -2px; }
+  .sheet::after { content: ''; position: absolute; top: 0; bottom: 0; right: 96px; width: 4px; background: var(--margin); opacity: .75; }
+  .wrap { position: absolute; inset: 0; padding: 0 150px 0 70px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+
+  .kicker { font-family: 'Amatic SC', cursive; font-weight: 700; font-size: 150px; line-height: .95; margin: 0; letter-spacing: 1px; }
+  .story-word { position: relative; display: inline-block; color: #a7a397; }
+  .story-word svg { position: absolute; inset: -10px -20px; width: calc(100% + 40px); height: calc(100% + 20px); overflow: visible; }
+  .scribble { fill: none; stroke: var(--ink1); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
+  .line2 { font-size: 60px; font-weight: 600; margin: 34px 0 0; line-height: 1.35; }
+  .hl { background: linear-gradient(transparent 38%, var(--marker) 38%, var(--marker) 92%, transparent 92%); padding: 0 10px; border-radius: 6px; }
+
+  .phones { position: relative; width: 760px; height: 700px; margin-top: 40px; }
+  .phone { position: absolute; top: 0; width: 318px; height: 688px; border-radius: 46px; background: #232323; padding: 13px; box-shadow: 0 26px 50px rgba(40,40,30,.28); }
+  .phone img { width: 100%; height: 100%; border-radius: 34px; object-fit: cover; object-position: top; display: block; }
+  .phone.a { right: 40px; transform: rotate(5deg); }
+  .phone.b { left: 40px; top: 30px; transform: rotate(-6deg); }
+  .tag { position: absolute; font-family: 'Amatic SC', cursive; font-weight: 700; font-size: 64px; padding: 0 22px; border-radius: 14px; background: var(--paper); border: 4px solid currentColor; }
+  .tag.a { color: var(--ink0); right: 0; bottom: 40px; transform: rotate(-4deg); }
+  .tag.b { color: var(--ink1); left: 0; bottom: 6px; transform: rotate(4deg); }
+  .vs { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%) rotate(-8deg); font-family: 'Amatic SC', cursive; font-weight: 700; font-size: 88px; background: var(--marker); border: 5px solid var(--pencil); border-radius: 50%; width: 150px; height: 150px; display: grid; place-items: center; z-index: 3; }
+
+  .steps { display: flex; gap: 18px; justify-content: center; align-items: center; margin-top: 46px; font-size: 44px; font-weight: 600; flex-wrap: nowrap; white-space: nowrap; }
+  .steps .n { display: inline-grid; place-items: center; width: 62px; height: 62px; border: 4px solid var(--pencil); border-radius: 50%; font-family: 'Amatic SC', cursive; font-weight: 700; font-size: 50px; margin-left: 10px; }
+  .steps .arrow { color: var(--soft); font-size: 40px; }
+  .five { font-family: 'Amatic SC', cursive; font-weight: 700; font-size: 118px; color: var(--ink0); margin: 36px 0 0; line-height: 1; }
+  .five .again { color: var(--ink1); }
+  .games { font-size: 34px; color: var(--soft); margin-top: 6px; }
+  .cta { margin-top: 40px; font-size: 52px; font-weight: 800; padding: 20px 56px; background: var(--marker); border: 5px solid var(--pencil); border-radius: 255px 18px 225px 18px / 18px 225px 18px 255px; box-shadow: 6px 8px 0 rgba(59,58,54,.85); }
+  .cta small { display: block; font-size: 34px; font-weight: 600; color: var(--pencil); direction: ltr; letter-spacing: 1px; }
+  .pencil { position: absolute; font-size: 120px; transform: rotate(-20deg); }
+
+  /* layout per format: story keeps the top 250px and bottom 340px free for Instagram's own UI */
+  body.story .wrap { padding-top: 250px; }
+  body.story .kicker { font-size: 132px; }
+  body.story .line2 { font-size: 52px; margin-top: 22px; }
+  body.story .phones { transform: scale(.76); transform-origin: top center; height: 540px; margin-top: 26px; }
+  body.story .steps { font-size: 38px; margin-top: 22px; }
+  body.story .five { font-size: 100px; margin-top: 20px; }
+  body.story .games { font-size: 32px; }
+  body.story .cta { margin-top: 26px; font-size: 44px; padding: 14px 50px; }
+  body.story .cta small { font-size: 30px; }
+  body.feed .wrap { padding-top: 64px; }
+  body.feed .kicker { font-size: 120px; }
+  body.feed .line2 { font-size: 50px; margin-top: 20px; }
+  body.feed .phones { transform: scale(.62); transform-origin: top center; height: 440px; margin-top: 26px; }
+  body.feed .steps { font-size: 36px; margin-top: 14px; }
+  body.feed .steps .n { width: 52px; height: 52px; font-size: 42px; }
+  body.feed .five { font-size: 92px; margin-top: 18px; }
+  body.feed .games { font-size: 28px; }
+  body.feed .cta { margin-top: 24px; font-size: 44px; padding: 14px 46px; }
+  body.feed .cta small { font-size: 30px; }
+
+  /* entrance animation (used for the video; the still images are taken at the end) */
+  .in { opacity: 0; animation: pop .55s cubic-bezier(.2,.9,.3,1.25) forwards; }
+  @keyframes pop { from { opacity: 0; transform: translateY(40px) scale(.92); } to { opacity: 1; transform: none; } }
+  .phone.a.in { animation-name: popA; } .phone.b.in { animation-name: popB; }
+  @keyframes popA { from { opacity: 0; transform: translateX(120px) rotate(18deg); } to { opacity: 1; transform: rotate(5deg); } }
+  @keyframes popB { from { opacity: 0; transform: translateX(-120px) rotate(-20deg); } to { opacity: 1; transform: rotate(-6deg); } }
+  .scribble { stroke-dasharray: 900; stroke-dashoffset: 900; animation: draw .7s ease-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .cta.in { animation: pop .55s cubic-bezier(.2,.9,.3,1.25) forwards, nudge 1.4s ease-in-out 1s infinite; }
+  @keyframes nudge { 0%, 100% { transform: none; } 50% { transform: scale(1.05) rotate(-1deg); } }
+</style>
+</head>
+<body>
+<div class="sheet"></div>
+<div class="wrap">
+  <h1 class="kicker in" style="animation-delay:.1s">יאללה, כל היום<br><span class="story-word">בסטורי?<svg viewBox="0 0 100 40" preserveAspectRatio="none"><path class="scribble" style="animation-delay:.8s" vector-effect="non-scaling-stroke" d="M2 24 C 20 18, 30 26, 48 21 S 80 17, 98 22"/></svg></span></h1>
+  <p class="line2 in" style="animation-delay:1.4s">לא חבל? <span class="hl">זמן איכות</span> עם חבר/ה</p>
+  <div class="phones">
+    <div class="phone a in" style="animation-delay:2.1s"><img src="src/hangman-play.png" alt=""></div>
+    <div class="phone b in" style="animation-delay:2.4s"><img src="src/five-many.png" alt=""></div>
+    <div class="vs in" style="animation-delay:2.9s">נגד</div>
+    <div class="tag a in" style="animation-delay:3.1s">אני ✏️</div>
+    <div class="tag b in" style="animation-delay:3.3s">חבר/ה ✏️</div>
+  </div>
+  <div class="steps in" style="animation-delay:3.8s"><span>מקליקים</span><span class="arrow">←</span><span>מזמינים חבר/ה</span><span class="arrow">←</span><span>אחלה זמן כיפי 🎉</span></div>
+  <div class="five in" style="animation-delay:4.5s">5 משחקים · <span class="again">שוב ושוב!</span></div>
+  <div class="games in" style="animation-delay:4.8s">בול פגיעה · איש תלוי · צוללות · נקודות · 5 בשורה</div>
+  <div class="cta in" style="animation-delay:5.4s">משחקים עכשיו, בחינם<small>small-joys.com</small></div>
+</div>
+<script>
+  const fmt = new URLSearchParams(location.search).get('fmt') || 'story';
+  document.body.className = fmt;
+</script>
+</body>
+</html>
