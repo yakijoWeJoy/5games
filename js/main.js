@@ -428,11 +428,40 @@ function header(ctx) {
     h('div', { class: 'players' }, tag(0), h('span', { class: 'vs' }, T('נגד', 'vs')), tag(1)));
 }
 
+/** guest: the name of whoever opened the page (from the game, or from the invite link) */
+function guestHostName() {
+  return (state && state.players[0].name) || (session && session.hostName) || inviterName();
+}
+/** link back to the same page, for the inviter (their phone still holds the room and simply reopens it) */
+function roomLink() {
+  const u = new URL(LANG === 'en' ? 'en/' : './', document.baseURI);
+  u.searchParams.set('room', session.code);
+  if (LOCAL) u.searchParams.set('local', 'host');
+  u.searchParams.set('back', '1');
+  return u.toString();
+}
+function nudgeText() {
+  return T(`${myName()} כאן ✏️ פתחתי את דף ועיפרון ואני מחכה לך – בוא/י לשחק! `, `${myName()} here ✏️ I opened Paper & Pencil and I\'m waiting for you – come play! `) + roomLink();
+}
+let nudges = 0;
+function nudgeTracked(method) {
+  nudges++;
+  track('host_nudged', { method, in_game: !!state, seconds_waiting: netT0 ? Math.round((Date.now() - netT0) / 1000) : null, nudge_n: nudges }, { now: true });
+}
+async function nudgeHost() {
+  const text = nudgeText();
+  if (navigator.share) {
+    try { await navigator.share({ text }); nudgeTracked('native_share'); toast(T('נשלח ✓ ממשיכים לחכות כאן', 'Sent ✓ waiting here')); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  nudgeTracked('whatsapp');
+  location.href = 'https://wa.me/?text=' + encodeURIComponent(text);
+}
+
 function connNote() {
   const joined = !!(state && state.players[1].token);
   const other = (state && state.players[1 - me].name) || (me === 0 ? T('השותף', 'your partner') : T('המארח', 'the host'));
   const code = session.code;
-  let title, lines = [], busy = false, retry = false;
+  let title, lines = [], busy = false, retry = false, nudge = false;
   if (link === 'offline') {
     title = T('אין אינטרנט בטלפון הזה', 'No internet on this phone');
     lines = [T('בדקו שה-WiFi או הגלישה פועלים.', 'Check that Wi-Fi or mobile data is on.'), T('ממשיכים לנסות לבד – אין צורך לרענן.', 'We keep trying by ourselves – no need to refresh.')];
@@ -448,9 +477,14 @@ function connNote() {
       : [T(`הקוד של הדף: ${code}`, `Page code: ${code}`)];
     busy = true;
   } else if (link === 'no-host') {
-    title = T(`הדף של ${other} לא עונה`, `${other}\'s page is not answering`);
-    lines = [T(`1. אצל ${other}: המשחק פתוח על המסך? (לא ברקע, לא נעול)`, `1. Is the game open on ${other}\'s screen? (not in the background, not locked)`), T(`2. הקוד נכון? נכנסתם לדף ${code}`, `2. Is the code right? You joined page ${code}`), T('3. לשני הטלפונים יש אינטרנט?', '3. Do both phones have internet?'), T('ברגע שהדף השני יתעורר – מתחברים לבד.', 'As soon as the other page wakes up, you\'ll connect by yourselves.')];
-    busy = true; retry = true;
+    // the inviter is simply not there right now: let them know we arrived, they come back through the link
+    const host = guestHostName();
+    title = host ? T(`${host} לא בדף כרגע`, `${host} isn\'t on the page right now`) : T('מי שפתח/ה את הדף לא שם כרגע', 'The person who opened the page isn\'t there right now');
+    lines = [
+      T('אולי סגר/ה את המשחק. שלחו הודעה שהגעתם – וכשיפתח/תפתח את הקישור, תתחברו לבד.', 'Maybe they closed the game. Let them know you\'re here – when they open the link, you\'ll connect by yourselves.'),
+      T(`אפשר לחכות כאן, או לסגור ולחזור אחר כך לאותו קישור. (קוד הדף: ${code})`, `You can wait here, or close and come back to the same link later. (Page code: ${code})`),
+    ];
+    busy = true; nudge = true;
   } else {
     title = state ? T(`החיבור ל${other} נפל – מתחברים מחדש…`, `Lost the connection to ${other} – reconnecting…`) : T(`מתחברים לדף ${code}…`, `Connecting to page ${code}…`);
     lines = [state ? T('המשחק שמור. אין צורך לעשות כלום.', 'The game is saved. Nothing to do.') : T('זה לוקח כמה שניות.', 'This takes a few seconds.')];
@@ -459,8 +493,11 @@ function connNote() {
   return h('div', { class: 'note warn conn' },
     h('div', { class: 'conn-title' }, busy ? h('span', { class: 'spin' }) : '⚠️ ', title),
     lines.map(l => h('div', { class: 'conn-line' }, l)),
+    nudge ? h('div', { class: 'row nudge-row' },
+      h('button', { class: 'btn marker', 'data-log': 'nudge-host', onclick: () => nudgeHost('share') }, T(`📲 להגיד ל${guestHostName() || 'מי שהזמין'} שהגעתי`, `📲 Tell ${guestHostName() || 'them'} I\'m here`)),
+      h('a', { class: 'btn small', 'data-log': 'nudge-whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent(nudgeText()), target: '_blank', rel: 'noopener', onclick: () => nudgeTracked('whatsapp') }, T('וואטסאפ', 'WhatsApp'))) : null,
     h('div', { class: 'conn-actions' },
-      retry ? h('button', { class: 'btn small marker', 'data-log': 'retry', onclick: () => { net && net.wake(); toast(T('מנסה שוב…', 'Trying again…')); } }, T('לנסות שוב', 'Try again')) : null,
+      retry || nudge ? h('button', { class: (nudge ? 'link-btn' : 'btn small marker'), 'data-log': 'retry', onclick: () => { net && net.wake(); toast(T('מנסה שוב…', 'Trying again…')); } }, T('לנסות שוב', 'Try again')) : null,
       h('button', { class: 'link-btn', 'data-log': 'leave', onclick: () => (state ? askLeaveRoom() : leaveRoom()) }, state ? T('יציאה מהדף', 'Leave the page') : T('ביטול', 'Cancel')),
       h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, T('משהו לא עובד?', 'Something not working?'))));
 }
@@ -620,7 +657,7 @@ function inviteCard() {
     h('ol', { class: 'help' },
       h('li', {}, T('שולחים הזמנה לטלפון השני (כפתור למטה).', 'Send an invite to the other phone (button below).')),
       h('li', {}, T('בטלפון השני פותחים את הקישור וכותבים שם.', 'On the other phone, open the link and type a name.')),
-      h('li', {}, h('b', {}, T('חוזרים לכאן', 'Come back here')), T(' – הדף הזה צריך להישאר פתוח על המסך.', ' – this page needs to stay open on the screen.'))),
+      h('li', {}, h('b', {}, T('חוזרים לכאן ומחכים', 'Come back here and wait')), T(' – או סוגרים: כשהחבר/ה ייכנס/תיכנס, תקבלו ממנו/ה הודעה עם קישור לכאן.', ' – or close it: when your friend gets in, they can send you a message with a link back here.'))),
     h('div', { class: 'note tip' }, T('📞 לא באותו חדר? תתקשרו אחד לשני ושימו על רמקול – ככה זה מרגיש כמו פעם.', '📞 Not in the same room? Call each other and put it on speaker – it feels just like the old days.')),
     h('div', { class: 'row center' },
       h('button', { class: 'btn marker', 'data-log': 'share', onclick: shareInvite }, T('📤 שליחת הזמנה', '📤 Send invite')),
@@ -764,8 +801,15 @@ const trustLine = () => h('div', { class: 'trust' }, T('בחינם · בלי ה�
 /** the name in an invite link (?from=…), shown as text only */
 function inviterName() { return (params.get('from') || '').replace(/[<>]/g, '').trim().slice(0, 14); }
 
-function homeView(room) {
+/** a visitor who came from a paid ad (not from a friend's invite) */
+function fromAd() {
+  const m = (params.get('utm_medium') || '').toLowerCase();
+  return /^(paid|cpc|ppc|ad|ads|paid_social|social_paid)$/.test(m) || params.has('ttclid') || params.has('fbclid');
+}
+
+function homeView(room, opts = {}) {
   const from = room ? inviterName() : '';
+  const landing = !room && (opts.landing || fromAd());
   const nameIn = h('input', { class: 'paper', placeholder: T('השם שלי', 'My name'), maxlength: 14, value: store.get('name', '') });
   const codeIn = h('input', { class: 'paper code', placeholder: '____', inputmode: 'numeric', maxlength: 4, value: room || '' });
   const getName = () => {
@@ -790,8 +834,10 @@ function homeView(room) {
     }, other === 'en' ? 'English' : 'עברית')),
     h('h1', { class: 'center', style: { fontSize: '64px', marginTop: '22px' } }, T('דף ועיפרון', 'Paper & Pencil')),
     doodle,
-    h('p', { class: 'center soft' }, T('כל אחד עם הטלפון שלו – כמו הדף שהיה לכל אחד מול העיניים.', 'Each on your own phone – just like each of you had your own sheet of paper.')),
-    h('div', { class: 'note tip' }, '💡 ', TOGETHER),
+    landing
+      ? h('p', { class: 'center landing-pitch' }, T('שולחים לחבר/ה קישור, וכל אחד משחק מהטלפון שלו – כמו פעם עם דף ועיפרון ✏️', 'Send a friend a link and each of you plays on your own phone – just like paper and pencil ✏️'))
+      : h('p', { class: 'center soft' }, T('כל אחד עם הטלפון שלו – כמו הדף שהיה לכל אחד מול העיניים.', 'Each on your own phone – just like each of you had your own sheet of paper.')),
+    landing ? null : h('div', { class: 'note tip' }, '💡 ', TOGETHER),
     h('div', { class: 'card stack' }, h('label', {}, T('איך קוראים לך?', 'What\'s your name?')), nameIn),
   ];
   if (room) {
@@ -802,7 +848,10 @@ function homeView(room) {
       trustLine()));
   } else {
     kids.push(
-      h('button', { class: 'btn big marker mt', onclick: () => { const n = getName(); if (n) startHost(n); } }, T('📄 פותחים דף חדש', '📄 Start a new page')),
+      landing
+        // straight from an ad: the whole point is the friend, so inviting is the first thing
+        ? h('button', { class: 'btn big marker mt', 'data-log': 'landing-invite', onclick: () => { const n = getName(); if (n) { startHost(n); shareInvite('landing'); } } }, T('📤 מזמינים חבר/ה לשחק', '📤 Invite a friend to play'))
+        : h('button', { class: 'btn big marker mt', onclick: () => { const n = getName(); if (n) startHost(n); } }, T('📄 פותחים דף חדש', '📄 Start a new page')),
       trustLine(),
       h('p', { class: 'center soft' }, T('— או —', '— or —')),
       h('div', { class: 'card stack' }, h('label', {}, T('יש לי קוד מהטלפון השני:', 'I have a code from the other phone:')), codeIn,
@@ -817,7 +866,7 @@ function homeView(room) {
         h('li', {}, T('משחקים סדרה של חמישה משחקים – הטוב מחמישה מנצח.', 'Play a series of five games – best of five wins.')))),
     room ? null : h('div', { class: 'center' }, installLink('home')),
     h('p', { class: 'center soft', style: { fontSize: '12px' } }, T(`גרסה ${VERSION} · האתר שולח נתוני שימוש ונתוני חיבור אנונימיים כדי לשפר את המשחקים ולאתר תקלות (בלי שמות ובלי תוכן המשחק).`, `Version ${VERSION} · The site sends anonymous usage and connection data to improve the games and find problems (no names, no game content).`)));
-  viewIs(room ? 'join' : 'home');
+  viewIs(room ? 'join' : landing ? 'landing' : 'home');
   app.replaceChildren(...kids.filter(Boolean));
 }
 
@@ -841,7 +890,7 @@ function startHost(name) {
 }
 
 function startGuest(name, code, via) {
-  session = { role: 'guest', code, token: deviceToken(), name, justJoined: true };
+  session = { role: 'guest', code, token: deviceToken(), name, justJoined: true, hostName: inviterName() || null };
   const n = bump('rooms_joined');
   track('join_submitted', { via: via || 'typed_code', is_first_join: n === 1 }, { now: true, set: lifetime(), setOnce: { first_role: 'guest' } });
   store.set('session', session);
@@ -913,8 +962,10 @@ async function boot() {
     me = params.get('me') === '1' ? 1 : 0;
     session = { role: me === 0 ? 'host' : 'guest', code: '4821', token: 't' + me, name: 'demo' };
     const d = demoState(params.get('demo'));
-    if (d.home) { session = null; homeView(d.room || null); return; }
+    if (d.home) { session = null; homeView(d.room || null, { landing: d.landing }); return; }
     state = d.state; link = d.link || 'linked';
+    if (d.hostName) session.hostName = d.hostName;
+    if (!state) { render(); return; }
     onState();
     return;
   }

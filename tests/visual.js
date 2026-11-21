@@ -27,7 +27,7 @@ const DEVICES = [
   { name: 'ultrawide-3440 (as seen in the logs)', w: 3440, h: 1440, dpr: 1, mobile: false },
 ];
 const UI = process.env.UI_LANG === 'en' ? 'en' : 'he'; // UI_LANG=en checks the English screens
-const SCENES = ['home', 'join', 'invite', 'menu', 'menu-mid', 'bull-secret', 'bull-play', 'bull-over', 'hangman-word', 'hangman-play',
+const SCENES = ['home', 'landing', 'guest-nohost', 'join', 'invite', 'menu', 'menu-mid', 'bull-secret', 'bull-play', 'bull-over', 'hangman-word', 'hangman-play',
   'ships-place', 'ships-play', 'dots', 'five', 'five-many', 'five-over', 'bull-play+help', 'hangman-play+help', 'ships-play+help', 'dots+help', 'five+help', 'decided', 'decided-menu', 'done-menu', 'lost'];
 
 const CHECK = () => {

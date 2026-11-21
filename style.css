@@ -453,3 +453,8 @@ body.my-turn::after {
 .install-link { margin-top: 4px; font-size: 15px; }
 /* reassurance for a first-time visitor */
 .trust { text-align: center; color: var(--pencil-soft); font-size: 14px; margin-top: 6px; }
+
+/* the friend is here, the inviter is not: message them */
+.nudge-row { justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+/* coming from an ad */
+.landing-pitch { font-size: 19px; line-height: 1.45; margin: 6px 4px 2px; }

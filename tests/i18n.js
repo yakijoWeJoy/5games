@@ -48,7 +48,7 @@ const look = p => p.evaluate(() => ({ lang: document.documentElement.lang, dir: 
   {
     const ctx = await browser.newContext({ locale: 'en-US', viewport: { width: 360, height: 760 } });
     const p = await ctx.newPage(); p.on('pageerror', e => errs.push('en demo: ' + e.message));
-    const scenes = ['home', 'join', 'invite', 'menu', 'menu-mid', 'bull-secret', 'bull-play', 'bull-over', 'ships-place', 'ships-play', 'dots', 'five', 'five-many', 'five-over', 'decided', 'decided-menu', 'done-menu', 'lost'];
+    const scenes = ['home', 'landing', 'guest-nohost', 'join', 'invite', 'menu', 'menu-mid', 'bull-secret', 'bull-play', 'bull-over', 'ships-place', 'ships-play', 'dots', 'five', 'five-many', 'five-over', 'decided', 'decided-menu', 'done-menu', 'lost'];
     const bad = [], wide = [];
     for (const sc of scenes) for (const me of [0, 1]) {
       await p.goto(`${BASE}?demo=${sc}&me=${me}&lang=en&help=1`); await sleep(250);

@@ -124,6 +124,9 @@ const SCENES = {
     return { state: s };
   },
   lost: () => { const d = SCENES['ships-play'](); d.link = 'no-host'; return d; },
+  landing: () => ({ home: true, landing: true }),
+  // a friend opened the invite while the inviter was away
+  'guest-nohost': () => ({ state: null, link: 'no-host', hostName: T('אבא', 'Dad') }),
 };
 
 export function demoState(name) {

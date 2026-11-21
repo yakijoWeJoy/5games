@@ -233,6 +233,7 @@ export function trackPageview(entry) {
   if (params.get('ttclid')) { utm.from_ad_click = true; if (!utm.utm_source) utm.utm_source = 'tiktok'; }
   // Meta (Instagram / Facebook) adds fbclid to clicks; again only the fact is kept
   if (params.get('fbclid')) { utm.from_meta_click = true; if (!utm.utm_source) utm.utm_source = /Instagram/.test(navigator.userAgent) ? 'instagram' : 'meta'; }
+  if (params.has('back')) utm.came_back_by_partner_message = true; // the friend messaged "I'm here" and this phone came back
   const invitedFrom = clean(params.get('src'));
   if (invitedFrom) utm.invited_from_source = invitedFrom;
   const src = campaignSource();
