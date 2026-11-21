@@ -42,7 +42,9 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
   const code = (await A.textContent('.code-big')).trim();
   await A.evaluate(() => { navigator.share = undefined; navigator.clipboard.writeText = () => Promise.resolve(); });
   await A.click('button[data-log="share"]');
-  await B.goto(BASE + `?local=guest&room=${code}`); await B.fill('input.paper', 'נועהלה'); await B.click('text=הצטרפות ✏️');
+  const wa = decodeURIComponent(await A.getAttribute('a[data-log="whatsapp"]', 'href'));
+  check(wa.includes('src=test'), 'the invite link carries the campaign that brought the host (src=…)');
+  await B.goto(BASE + `?local=guest&room=${code}&src=test`); await B.fill('input.paper', 'נועהלה'); await B.click('text=הצטרפות ✏️');
   await A.waitForSelector('.game-row'); await B.waitForSelector('.game-row');
 
   // game 1 (bull): host wins
@@ -75,6 +77,7 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
   }
   const pv = by('$pageview');
   check(pv.some(e => e.properties.entry === 'direct' && e.properties.utm_source === 'test') && pv.some(e => e.properties.entry === 'invite_link'), 'page views tell a direct visit from an invite link, with utm');
+  check(pv.some(e => e.properties.entry === 'invite_link' && e.properties.invited_from_source === 'test'), 'the invited friend is credited to the campaign');
   check(by('join_submitted')[0] && by('join_submitted')[0].properties.via === 'invite_link', 'the join knows it came from the link');
   check(by('invite_shared')[0] && by('invite_shared')[0].properties.method === 'copy_link', 'the invite method is recorded');
   const gc = by('game_completed');
@@ -107,6 +110,19 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
   const A2 = await ctx.newPage();
   await A2.goto(BASE + '?local=host'); await A2.waitForSelector('.game-row'); await sleep(4500);
   check(events.length > before && events.slice(before).some(e => e.event === 'sound_toggled'), 'events made while offline are sent after the next load');
+
+  // a TikTok ad click inside TikTok's own browser
+  const ctx3 = await browser.newContext({ userAgent: 'Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36 musical_ly_2023405030 BytedanceWebview/d8a21c6' });
+  await ctx3.addInitScript(() => { window.__dvAnalytics = { key: 'phc_test', host: 'https://ph.test' }; });
+  const tt = [];
+  await ctx3.route('https://ph.test/**', async r => { try { tt.push(...JSON.parse(r.request().postData()).batch); } catch { /* */ } await r.fulfill({ status: 200, body: '{}' }); });
+  const T = await ctx3.newPage();
+  await T.goto(BASE + '?local=host&utm_medium=paid&utm_campaign=launch&ttclid=E.C.P.abc123secret');
+  await T.evaluate(() => window.__dv.flushAnalytics()); await sleep(400);
+  const tpv = tt.find(e => e.event === '$pageview');
+  check(tpv && tpv.properties.$browser === 'In-app (TikTok)' && tpv.properties.utm_source === 'tiktok' && tpv.properties.from_ad_click === true && tpv.properties.utm_campaign === 'launch', 'TikTok ad click: TikTok browser, source tiktok, campaign kept');
+  check(!JSON.stringify(tt).includes('abc123secret'), 'the TikTok click id itself is not stored');
+  await ctx3.close();
 
   // demo / local runs without the test switch send nothing
   const ctx2 = await browser.newContext();

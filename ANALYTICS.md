@@ -52,6 +52,7 @@ The following properties are on **every event**:
 | `invite_share_cancelled` | the share sheet was closed | `from` |
 | `join_submitted` | guest presses join | `via` (`invite_link` / `typed_code`), `is_first_join` |
 | `join_code_invalid` | typed code wasn't 4 digits | `length` |
+| `name_missing` | pressed create / join without typing a name | `screen` |
 | `partner_joined` | host: the second phone arrived | `seconds_waiting`, `is_replacement` |
 | `connected` | first successful link in this page load | `ms` (time to connect), `direct` (WebRTC vs relay), `resumed` |
 
@@ -97,6 +98,40 @@ These are set only once:
 These are updated over time:
 - `last_version`
 - `lifetime_sessions`, `lifetime_rooms_hosted`, `lifetime_rooms_joined`, `lifetime_games_completed`, `lifetime_series_completed`
+
+## Campaigns (TikTok and others)
+
+Give every campaign link UTM tags. Use one `utm_content` per video, so you can see which video brings players who actually finish a game:
+
+```
+Ad (paid):    https://yakijowejoy.github.io/5games/?utm_source=tiktok&utm_medium=paid&utm_campaign=launch&utm_content=video1
+Profile bio:  https://yakijowejoy.github.io/5games/?utm_source=tiktok&utm_medium=bio&utm_campaign=launch
+```
+
+- **Ad clicks without tags:** TikTok adds `ttclid` to ad clicks. A visit with `ttclid` is counted as `utm_source = tiktok` with `from_ad_click = true`. The click ID itself isn't stored.
+- **TikTok's built-in browser:** it is reported as `$browser = In-app (TikTok)`.
+- **Invited friends:** the first campaign that brought a device is saved on that device as `campaign_source`. It's added to that player's invite links as `src=…`, so a friend who comes through the invite is credited to the campaign with `invited_from_source`. Invited friends are the campaign's free extra reach.
+
+## The new-player funnel report
+
+```
+POSTHOG_PERSONAL_KEY=phx_... python3 tools/funnel.py            # last 7 days
+POSTHOG_PERSONAL_KEY=phx_... python3 tools/funnel.py 7 tiktok   # only players from TikTok
+```
+
+The report covers devices that were new in the period, split into the host path and the guest path. It shows:
+- **Each step and how many players reached it:** visited → created a room or pressed join → partner connected → started a game → finished a game.
+- **For the players who stopped at each step:**
+  - the last screen they saw
+  - the connection problems they hit
+  - whether they pressed without a name, typed a wrong code, or opened "something isn't working?"
+  - which game and phase they quit in
+- **Totals:**
+  - completion rate by browser and by source
+  - connection speed and failure counts
+  - the top script errors
+
+The personal key comes from PostHog → Settings → Personal API keys, with the scope `query:read`. Don't commit it.
 
 ## Dashboards to build in PostHog
 

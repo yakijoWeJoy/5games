@@ -2,7 +2,7 @@ import { h, toast, confirmBox, tally, buzz, rid } from './ui.js';
 import { Link, LOCAL } from './net.js';
 import { play, soundOn, setSound } from './sound.js';
 import { log, flush as flushLog, setLogContext, dev as logDev, ring as logRing, VERSION } from './log.js';
-import { track, trackPageview, trackScreen, setContext, bump, lifetime, flush as flushAnalytics } from './analytics.js';
+import { track, trackPageview, trackScreen, setContext, bump, lifetime, flush as flushAnalytics, campaignSource } from './analytics.js';
 import { gameEvents } from './metrics.js';
 import { GAMES, BY, STATE_V, NEED, cleanName, newState, reduce, seriesWins, seriesDone, seriesDecided, seriesLeader, nextGame } from './core.js';
 
@@ -586,6 +586,8 @@ function shareUrl() {
   u.search = '';
   u.searchParams.set('room', session.code);
   if (LOCAL) u.searchParams.set('local', 'guest');
+  const src = campaignSource(); // analytics: a friend invited by a campaign player still counts for the campaign
+  if (src) u.searchParams.set('src', src);
   return u.toString();
 }
 
@@ -750,7 +752,7 @@ function homeView(room) {
   const codeIn = h('input', { class: 'paper code', placeholder: '____', inputmode: 'numeric', maxlength: 4, value: room || '' });
   const getName = () => {
     const n = nameIn.value.trim();
-    if (!n) { toast('קודם כותבים שם 🙂'); nameIn.focus(); return null; }
+    if (!n) { toast('קודם כותבים שם 🙂'); nameIn.focus(); track('name_missing', { screen: room ? 'join' : 'home' }); return null; }
     store.set('name', n);
     return cleanName(n);
   };

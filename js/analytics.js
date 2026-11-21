@@ -82,7 +82,7 @@ function device() {
   const ua = navigator.userAgent || '';
   const ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   const os = /Android/.test(ua) ? 'Android' : /iPhone|iPod/.test(ua) || ipad ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac OS X' : /CrOS/.test(ua) ? 'Chrome OS' : /Linux/.test(ua) ? 'Linux' : 'Other';
-  const browser = /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /FBAN|FBAV|Instagram/.test(ua) ? 'In-app (Facebook/Instagram)' : /WhatsApp/.test(ua) ? 'In-app (WhatsApp)'
+  const browser = /musical_ly|BytedanceWebview|TikTok|trill_/i.test(ua) ? 'In-app (TikTok)' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /FBAN|FBAV|Instagram/.test(ua) ? 'In-app (Facebook/Instagram)' : /WhatsApp/.test(ua) ? 'In-app (WhatsApp)'
     : /Edg\//.test(ua) ? 'Microsoft Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'Other';
   const tablet = ipad || (/Android/.test(ua) && !/Mobile/.test(ua));
   const conn = navigator.connection || {};
@@ -208,6 +208,20 @@ export function flush(final) {
 
 let viewStart = 0, lastScreen = null;
 
+/**
+ * The campaign that first brought this device (utm_source, or "tiktok" for a TikTok ad click).
+ * It rides along on the invite links this player sends, so a friend who arrives through the invite
+ * is still credited to the campaign (src=…): that is the campaign's viral reach.
+ */
+const clean = v => String(v || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30);
+export function campaignSource() {
+  let src = ls('dv:asrc');
+  if (src) return src;
+  src = clean(params.get('utm_source')) || (params.get('ttclid') ? 'tiktok' : '') || clean(params.get('src'));
+  if (src) ls('dv:asrc', src);
+  return src || '';
+}
+
 /** call once per page load. entry: invite_link | resume | direct */
 export function trackPageview(entry) {
   if (!ENABLED) return;
@@ -215,15 +229,20 @@ export function trackPageview(entry) {
   const refHost = ref && ref.host !== location.host ? ref.host : '';
   const utm = {};
   for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) if (params.get(k)) utm[k] = params.get(k).slice(0, 80);
+  // TikTok adds ttclid to ad clicks; only the fact is kept, not the id
+  if (params.get('ttclid')) { utm.from_ad_click = true; if (!utm.utm_source) utm.utm_source = 'tiktok'; }
+  const invitedFrom = clean(params.get('src'));
+  if (invitedFrom) utm.invited_from_source = invitedFrom;
+  const src = campaignSource();
   viewStart = Date.now();
   track('$pageview', {
     entry, $referrer: refHost ? ref.origin + ref.pathname : '$direct', $referring_domain: refHost || '$direct', ...utm,
-    is_new_user: isNewUser,
+    is_new_user: isNewUser, campaign_source: src || null,
   }, {
     now: true,
     setOnce: {
       first_seen_at: new Date(firstSeen).toISOString(), first_version: VERSION, first_entry: entry,
-      $initial_referring_domain: refHost || '$direct', $initial_os: dev.$os, $initial_device_type: dev.$device_type,
+      $initial_referring_domain: refHost || '$direct', acquisition_source: src || (refHost || 'direct'), acquired_via_invite_from: invitedFrom || null, $initial_os: dev.$os, $initial_device_type: dev.$device_type,
       ...Object.fromEntries(Object.entries(utm).map(([k, v]) => ['$initial_' + k, v])),
     },
     set: { last_version: VERSION, $os: dev.$os, $browser: dev.$browser, $device_type: dev.$device_type, lang: dev.lang, ...lifetime() },
