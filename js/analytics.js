@@ -11,7 +11,7 @@
  */
 import { VERSION } from './log.js';
 
-const POSTHOG_KEY = '';
+const POSTHOG_KEY = 'phc_kH4Ts6iyuRaxCsJB5N99aj4v9Bqu6n3WbBvqBFcKNiQ4'; // project key: can only send events, safe to publish
 const POSTHOG_HOST = 'https://eu.i.posthog.com';
 
 const W = typeof window !== 'undefined' ? window : null;
