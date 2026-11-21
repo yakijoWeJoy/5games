@@ -94,6 +94,32 @@ const look = p => p.evaluate(() => ({ lang: document.documentElement.lang, dir: 
     await ctx.close();
   }
 
+  // ----- the English address: English link preview, same game -----
+  {
+    const { execFileSync } = require('child_process');
+    let upToDate = true;
+    try { execFileSync('python3', [require('path').join(__dirname, '..', 'tools', 'make-en.py'), '--check']); } catch { upToDate = false; }
+    check(upToDate, 'en/index.html matches index.html (run tools/make-en.py after changing index.html)');
+    const ctx = await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } });
+    await ctx.addInitScript(() => { window.__dvTest = true; });
+    const p = await ctx.newPage(); p.on('pageerror', e => errs.push('en/: ' + e.message));
+    const r = await p.goto(BASE + 'en/?local=enaddr');
+    const head = await r.text();
+    check(/og-en\.png/.test(head) && /Paper &amp; Pencil – 5 games for two/.test(head), 'the English address has an English link preview');
+    await p.fill('input.paper', 'Noa'); await p.click('text=Start a new page');
+    await p.waitForSelector('.code-big');
+    const wa = decodeURIComponent(await p.getAttribute('a[data-log="whatsapp"]', 'href'));
+    check(/\/en\/\?room=/.test(wa) && /Noa invites you/.test(wa), 'an English phone invites with the English address');
+    await ctx.close();
+    const ctx2 = await browser.newContext({ locale: 'he-IL' });
+    await ctx2.addInitScript(() => { window.__dvTest = true; });
+    const q = await ctx2.newPage();
+    await q.goto(BASE + '?local=headdr'); await q.fill('input.paper', 'אבא'); await q.click('text=פותחים דף חדש'); await q.waitForSelector('.code-big');
+    const wa2 = decodeURIComponent(await q.getAttribute('a[data-log="whatsapp"]', 'href'));
+    check(!/\/en\//.test(wa2) && /\?room=/.test(wa2), 'a Hebrew phone keeps the Hebrew address');
+    await ctx2.close();
+  }
+
   check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await browser.close();
   console.log(failed ? `${failed} FAILED` : 'language: all checks passed');

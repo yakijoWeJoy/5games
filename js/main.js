@@ -585,8 +585,8 @@ function resultCard(G, ctx) {
 const TOGETHER = T('הכי כיף כשיושבים אחד ליד השני – או מדברים בטלפון (על רמקול) תוך כדי המשחק. חצי מהכיף זה הדיבורים 🙂', 'It\'s most fun sitting next to each other – or talking on the phone (on speaker) while you play. Half the fun is the chatting 🙂');
 
 function shareUrl() {
-  const u = new URL(location.href);
-  u.search = '';
+  // an English phone sends the English address, so the friend's link preview is in English too (en/index.html)
+  const u = new URL(LANG === 'en' ? 'en/' : './', document.baseURI);
   u.searchParams.set('room', session.code);
   if (LOCAL) u.searchParams.set('local', 'guest');
   const src = campaignSource(); // analytics: a friend invited by a campaign player still counts for the campaign

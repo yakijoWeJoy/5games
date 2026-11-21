@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <!-- Link preview picture (WhatsApp, Facebook, Instagram DMs): 1200x630. Rendered by marketing/og/render.js -->
-<link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Playpen+Sans+Hebrew:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Playpen+Sans+Hebrew:wght@400;600;800&family=Playpen+Sans:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   html, body { margin: 0; }
   body { width: 1200px; height: 630px; overflow: hidden; background: #fbf8ef; color: #3b3a36; font-family: 'Playpen Sans Hebrew', sans-serif; position: relative;
@@ -17,16 +17,40 @@
   .two .hl { background: linear-gradient(transparent 40%, #fff09a 40%, #fff09a 92%, transparent 92%); padding: 0 8px; }
   .games { font-size: 25px; color: #8a867b; margin-top: 14px; line-height: 1.5; }
   .free { margin-top: 22px; font-size: 30px; font-weight: 600; color: #c5332b; }
+  body.en::after { right: auto; left: 70px; }
+  body.en .icon { left: auto; right: 70px; }
+  body.en .txt { right: auto; left: 110px; }
+  body.en h1 { font-size: 132px; }
+  body.en .two { font-size: 46px; line-height: 1.25; }
+  body.en .two, body.en .games, body.en .free { font-family: 'Playpen Sans', sans-serif; color: #3b3a36; }
+  body.en .games { color: #8a867b; font-size: 24px; }
+  body.en .free { color: #c5332b; }
+  body.en h1 { color: #2350b8; }
 </style>
 </head>
 <body>
 <img class="icon" src="../icon/icon-1024.png" alt="">
-<div class="txt">
+<div class="txt en-only" style="display:none">
+  <h1>Paper &amp; Pencil</h1>
+  <div class="two"><span class="hl">5 games for two</span><br>each on your own phone</div>
+  <div class="games">Bulls &amp; Cows · Hangman · Battleships · Dots &amp; Boxes · Five in a Row</div>
+  <div class="free">Free · no sign-up · no download</div>
+</div>
+<div class="txt he-only">
   <h1>דף ועיפרון</h1>
   <div class="en">Paper &amp; Pencil</div>
   <div class="two"><span class="hl">5 משחקים לשניים</span> · כל אחד בטלפון שלו</div>
   <div class="games">בול פגיעה · איש תלוי · צוללות · נקודות · 5 בשורה</div>
   <div class="free">בחינם · בלי הרשמה · בלי הורדה</div>
 </div>
+<script>
+  // ?lang=en: the English picture (for invites sent from an English phone)
+  if (new URLSearchParams(location.search).get('lang') === 'en') {
+    document.documentElement.lang = 'en'; document.documentElement.dir = 'ltr';
+    document.querySelector('.he-only').style.display = 'none';
+    document.querySelector('.en-only').style.display = '';
+    document.body.classList.add('en');
+  }
+</script>
 </body>
 </html>
