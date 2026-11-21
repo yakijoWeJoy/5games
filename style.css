@@ -38,13 +38,13 @@ body {
   max-width: 560px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 10px 40px 110px 16px;
+  padding: 10px 16px 110px; padding-inline-start: 40px;
 }
-/* the red margin line of a notebook, on the right side */
+/* the red margin line of a notebook, on the starting side (right in Hebrew, left in English) */
 #app::before {
   content: '';
   position: absolute;
-  top: 0; bottom: 0; right: 26px;
+  top: 0; bottom: 0; inset-inline-start: 26px;
   width: 2px;
   background: var(--margin);
   opacity: .75;
@@ -148,7 +148,7 @@ header.top {
 .menu .title { text-align: center; font-size: 50px; margin-top: 10px; }
 .game-row {
   display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px;
-  width: 100%; text-align: right;
+  width: 100%; text-align: start;
   background: none; border: 0; border-bottom: 1.5px dashed var(--pencil-soft);
   padding: 12px 2px;
 }
@@ -282,7 +282,7 @@ table.paper tr.win td { background: var(--marker); }
   transform: rotate(-3deg);
   font-family: var(--hand);
 }
-.fab .badge { background: var(--ink1); color: #fff; border-radius: 12px; padding: 0 7px; font-size: 14px; margin-right: 4px; }
+.fab .badge { background: var(--ink1); color: #fff; border-radius: 12px; padding: 0 7px; font-size: 14px; margin-inline-start: 4px; }
 .sheet-bg { position: fixed; inset: 0; background: rgba(40,40,30,.25); z-index: 40; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
@@ -299,7 +299,7 @@ table.paper tr.win td { background: var(--marker); }
 .msgs { overflow-y: auto; flex: 1; min-height: 120px; display: flex; flex-direction: column; gap: 6px; padding: 6px 0; }
 .msg { max-width: 82%; font-family: var(--hand); font-size: 18px; line-height: 1.35; }
 .msg.mine { align-self: flex-start; }
-.msg.theirs { align-self: flex-end; text-align: left; }
+.msg.theirs { align-self: flex-end; text-align: end; }
 .msg b { font-size: 13px; display: block; opacity: .75; }
 .quick { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0; }
 .quick button { flex: none; background: #fff; border: 1.5px solid var(--pencil-soft); border-radius: 16px; padding: 4px 10px; font-size: 15px; }
@@ -323,7 +323,7 @@ table.paper tr.win td { background: var(--marker); }
 .pencil-line { border: 0; height: 2px; background: var(--pencil-soft); opacity: .5; border-radius: 50%; margin: 16px 0; }
 
 /* ---------- connection help ---------- */
-.conn { transform: none; text-align: right; font-family: var(--font); }
+.conn { transform: none; text-align: start; font-family: var(--font); }
 a.btn { color: inherit; text-decoration: none; }
 .conn-title { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; }
 .conn-line { font-family: var(--font); font-size: 15px; margin-top: 4px; }
@@ -334,21 +334,21 @@ a.btn { color: inherit; text-decoration: none; }
   animation: spin 1s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-ol.help { text-align: right; margin: 8px 0; padding-right: 22px; font-size: 15px; line-height: 1.5; }
+ol.help { text-align: start; margin: 8px 0; padding-inline-start: 22px; font-size: 15px; line-height: 1.5; }
 .wait-line { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; color: var(--pencil-soft); }
 .wait-line.bad { color: var(--ink1); font-weight: 700; }
-.tech { text-align: right; max-height: 86vh; overflow: auto; }
-.tech-box { font-size: 13px; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px; margin: 8px 0; direction: rtl; line-height: 1.6; }
+.tech { text-align: start; max-height: 86vh; overflow: auto; }
+.tech-box { font-size: 13px; background: rgba(0,0,0,.04); border-radius: 8px; padding: 8px; margin: 8px 0; line-height: 1.6; }
 .tech-log { font-size: 10px; direction: ltr; text-align: left; white-space: pre-wrap; word-break: break-all; color: var(--pencil-soft); max-height: 150px; overflow: auto; margin: 10px 0 0; }
 
 /* ---------- series ---------- */
 div.game-row { cursor: default; }
 .game-row.later { opacity: .5; }
 .game-row.done b:first-child { text-decoration: none; }
-.row-mark { min-width: 76px; text-align: left; font-size: 15px; }
+.row-mark { min-width: 76px; text-align: end; font-size: 15px; }
 .next-arrow { font-weight: 700; background: var(--marker); padding: 1px 6px; white-space: nowrap; }
 .series-line { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin: 8px 0 4px; font-size: 18px; flex-wrap: wrap; }
-.series-line .sc { font-family: var(--title); font-size: 34px; line-height: 1; display: inline-flex; gap: 6px; direction: rtl; }
+.series-line .sc { font-family: var(--title); font-size: 34px; line-height: 1; display: inline-flex; gap: 6px; }
 .series-line.big { margin-top: 16px; font-size: 21px; }
 .series-line.big .sc { font-size: 52px; }
 .verdict { font-family: var(--title); font-size: 34px; font-weight: 700; line-height: 1.1; margin: 4px 0; }
@@ -362,7 +362,7 @@ div.game-row { cursor: default; }
 .top-btns { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .icon-btn { white-space: nowrap; }
 .chat-btn { background: #fff9c9; border: 1.5px solid var(--pencil); border-radius: var(--wobble); padding: 4px 9px; font-size: 15px; position: relative; }
-.chat-btn .badge { background: var(--ink1); color: #fff; border-radius: 12px; padding: 0 6px; font-size: 12px; margin-right: 4px; }
+.chat-btn .badge { background: var(--ink1); color: #fff; border-radius: 12px; padding: 0 6px; font-size: 12px; margin-inline-start: 4px; }
 .ptag { font-family: var(--font); max-width: 27vw; }
 .turn { font-family: var(--font); }
 @media (max-width: 400px) {
@@ -383,7 +383,7 @@ div.game-row { cursor: default; }
 .word-entry .word { margin: 0; }
 
 /* ---------- whose turn: the pencil goes from hand to hand ---------- */
-.turn { position: relative; padding-left: 44px; padding-right: 12px; gap: 8px; border-radius: 6px; transition: background .25s, color .25s; }
+.turn { position: relative; padding-inline-end: 44px; padding-inline-start: 12px; gap: 8px; border-radius: 6px; transition: background .25s, color .25s; }
 .turn .turn-txt { min-width: 0; }
 .turn.mine {
   font-size: 20px; font-weight: 700; color: var(--me-ink, var(--pencil));
@@ -397,7 +397,7 @@ div.game-row { cursor: default; }
 .turn-pencil { display: inline-block; font-size: 20px; flex: none; animation: scribble 1.1s ease-in-out infinite; transform-origin: 30% 80%; }
 @keyframes scribble { 0%,100% { transform: translate(0,0) rotate(-8deg); } 25% { transform: translate(3px,-1px) rotate(4deg); } 50% { transform: translate(-2px,1px) rotate(-4deg); } 75% { transform: translate(2px,1px) rotate(6deg); } }
 .help-btn {
-  position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+  position: absolute; inset-inline-end: 6px; top: 50%; transform: translateY(-50%);
   width: 32px; height: 32px; border-radius: 50%; padding: 0;
   border: 2px solid currentColor; background: rgba(255,255,255,.7);
   font-weight: 700; font-size: 17px; color: var(--pencil); line-height: 1;
@@ -416,9 +416,9 @@ body.my-turn::after {
 .holder-ico { font-size: 13px; }
 .sound-btn { font-size: 17px; }
 /* how to play */
-.help-card { text-align: right; }
+.help-card { text-align: start; }
 .help-card h3 { text-align: center; }
-.help-list { margin: 8px 0 14px; padding-right: 20px; font-size: 16px; line-height: 1.55; }
+.help-list { margin: 8px 0 14px; padding-inline-start: 20px; font-size: 16px; line-height: 1.55; }
 .help-list li { margin-bottom: 6px; }
 .help-card .btn { display: flex; margin: 0 auto; }
 .help-foot { font-size: 13px; text-align: center; margin-top: 8px; }
@@ -439,3 +439,7 @@ body.my-turn::after {
   .turn.wait { font-size: 15px; }
   .turn .turn-ico, .turn-pencil { font-size: 17px; }
 }
+
+/* language switch on the home screen */
+.lang-switch { display: flex; justify-content: flex-end; margin: 4px 0 -14px; }
+.lang-switch .link-btn { font-size: 15px; }

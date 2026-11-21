@@ -1,6 +1,7 @@
 /* Canned screens for visual testing in any browser (?demo=<scene>&me=0|1). No network involved. */
 import { newState, reduce, GAMES } from './core.js';
 import { SHIPS } from './games/ships.js';
+import { T } from './i18n.js';
 
 const LAYOUT = [
   { id: 'nun', cells: [[0, 0], [0, 1], [1, 0], [2, 0], [3, 0]] }, { id: 's4', cells: [[2, 2], [2, 3], [2, 4], [2, 5]] },
@@ -9,8 +10,8 @@ const LAYOUT = [
 const SHIP_CELLS = LAYOUT.flatMap(s => s.cells);
 
 function mk() {
-  const s = newState('אבא', 't0');
-  s.players[1] = { name: 'נועה', token: 't1' };
+  const s = newState(T('אבא', 'Dad'), 't0');
+  s.players[1] = { name: T('נועה', 'Noa'), token: 't1' };
   return s;
 }
 const A = (s, p, a) => { if (!reduce(s, p, a, { test: true })) throw new Error('demo action refused: ' + JSON.stringify(a)); };
@@ -63,7 +64,7 @@ function playSeries(s, winners) {
 const SCENES = {
   home: () => ({ home: true }),
   join: () => ({ home: true, room: '4821' }),
-  invite: () => { const s = newState('אבא', 't0'); return { state: s }; },
+  invite: () => { const s = newState(T('אבא', 'Dad'), 't0'); return { state: s }; },
   menu: () => ({ state: mk() }),
   'menu-mid': () => { const s = mk(); playSeries(s, [0, 1]); A(s, 0, { k: 'menu' }); return { state: s }; },
   'bull-secret': () => { const s = mk(); A(s, 0, { k: 'next' }); return { state: s }; },

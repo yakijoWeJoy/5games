@@ -16,7 +16,7 @@ const check = (ok, label, detail) => { if (!ok) { failed++; console.log(`  ✗ $
 (async () => {
   const browser = await chromium.launch();
   for (const d of SIZES) {
-    const ctx = await browser.newContext({ viewport: { width: d.w, height: d.h }, isMobile: d.touch, hasTouch: d.touch });
+    const ctx = await browser.newContext({ locale: 'he-IL', viewport: { width: d.w, height: d.h }, isMobile: d.touch, hasTouch: d.touch });
     const page = await ctx.newPage();
     const errs = [];
     page.on('pageerror', e => errs.push(e.message));

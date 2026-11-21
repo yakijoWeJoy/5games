@@ -18,6 +18,8 @@ step "disconnects (relay only)"       env MODE=relay tests/with-servers.sh node 
 step "disconnects (relay + direct)"   env MODE=both tests/with-servers.sh node tests/e2e-net.js
 step "relay servers fail and return"  tests/with-servers.sh node tests/e2e-outage.js
 step "every screen on 14 sizes"       tests/with-servers.sh node tests/visual.js http://localhost:8765/ visual-out
+step "English: every screen, 14 sizes" env UI_LANG=en tests/with-servers.sh node tests/visual.js http://localhost:8765/ visual-out/en
+step "English & language choice"       tests/with-servers.sh node tests/i18n.js
 if command -v xvfb-run >/dev/null && /usr/bin/python3.12 -c "import gi" 2>/dev/null; then
   step "WebKit (iPhone engine)"       tests/with-servers.sh tests/webkit-all.sh visual-out/webkit
 fi

@@ -5,6 +5,7 @@ import { log, flush as flushLog, setLogContext, dev as logDev, ring as logRing, 
 import { track, trackPageview, trackScreen, setContext, bump, lifetime, flush as flushAnalytics, campaignSource } from './analytics.js';
 import { gameEvents } from './metrics.js';
 import { GAMES, BY, STATE_V, NEED, cleanName, newState, reduce, seriesWins, seriesDone, seriesDecided, seriesLeader, nextGame } from './core.js';
+import { T, LANG, setLang } from './i18n.js';
 
 const params = new URLSearchParams(location.search);
 const NS = 'dv:' + (params.get('local') || '') + ':';
@@ -91,7 +92,7 @@ function act(a0) {
   const a = withContext(a0);
   if (DEMO) { const s = structuredClone(state); if (reduce(s, me, a, { test: true })) { s.rev++; state = s; onState(); } return; }
   if (session.role === 'host') { hostDispatch(0, a); return; }
-  if (link !== 'linked') { toast('אין חיבור כרגע… מנסה להתחבר שוב'); net && net.wake(); return; }
+  if (link !== 'linked') { toast(T('אין חיבור כרגע… מנסה להתחבר שוב', 'No connection right now… trying to reconnect')); net && net.wake(); return; }
   const msg = { t: 'act', id: rid(10), a };
   outbox.push({ msg, t: Date.now(), sent: Date.now() });
   net.send(msg);
@@ -108,7 +109,7 @@ function flushOutbox(force) {
     keep.push(o);
   }
   outbox = keep;
-  if (dropped) toast('הפעולה האחרונה לא נשלחה – נסו שוב');
+  if (dropped) toast(T('הפעולה האחרונה לא נשלחה – נסו שוב', 'Your last move was not sent – please try again'));
 }
 
 /* ======================= networking ======================= */
@@ -139,7 +140,7 @@ function startNet() {
         s.players[1] = { name: cleanName(d.name), token: d.token };
         commit(s);
         if (first) {
-          toast(`${s.players[1].name} הצטרף/ה לדף! ✏️`); buzz([40, 60, 40]); play('join');
+          toast(T(`${s.players[1].name} הצטרף/ה לדף! ✏️`, `${s.players[1].name} joined! ✏️`)); buzz([40, 60, 40]); play('join');
           track('partner_joined', { room_id: s.sid, seconds_waiting: session.created ? Math.round((Date.now() - session.created) / 1000) : null, is_replacement: !!(s.banned && s.banned.length) }, { now: true });
         }
       },
@@ -219,7 +220,7 @@ function versionMismatch(v) {
   let tried = false;
   try { tried = sessionStorage.getItem('dv:reloaded') === String(v); sessionStorage.setItem('dv:reloaded', String(v)); } catch { /* ignore */ }
   if (v > STATE_V && !tried) { location.reload(); return; }
-  toast(v > STATE_V ? 'צריך לרענן את הדף בטלפון הזה כדי לקבל את הגרסה החדשה' : 'בטלפון השני יש גרסה ישנה – צריך לרענן שם את הדף', null, 6000);
+  toast(v > STATE_V ? T('צריך לרענן את הדף בטלפון הזה כדי לקבל את הגרסה החדשה', 'Please refresh the page on this phone to get the new version') : T('בטלפון השני יש גרסה ישנה – צריך לרענן שם את הדף', 'The other phone has an old version – please refresh the page there'), null, 6000);
 }
 
 const newCode = () => {
@@ -230,7 +231,7 @@ const newCode = () => {
 /* ======================= reacting to state ======================= */
 
 function ctxFor() {
-  const names = state.players.map((p, i) => p.name || (i === 0 ? 'מארח' : 'אורח'));
+  const names = state.players.map((p, i) => p.name || (i === 0 ? T('מארח', 'Host') : T('אורח', 'Guest')));
   return { me, other: 1 - me, names, send: a => act({ k: 'g', a }) };
 }
 
@@ -251,13 +252,13 @@ function onState() {
     if (m.p !== me) {
       buzz([30, 40, 30]);
       play('note');
-      if (!chatOpen) { unread++; toast(m.text, `✉️ פתק מ${state.players[m.p].name}`, 3800); }
+      if (!chatOpen) { unread++; toast(m.text, T(`✉️ פתק מ${state.players[m.p].name}`, `✉️ Note from ${state.players[m.p].name}`), 3800); }
     }
   }
   // game switched by the other player
   const key = state.game ? state.game.id : null;
   if (prevGameKey !== undefined && prevGameKey !== null && key === null && state.leftBy !== me) {
-    toast(`${state.players[1 - me].name} חזר/ה לתפריט`);
+    toast(T(`${state.players[1 - me].name} חזר/ה לתפריט`, `${state.players[1 - me].name} went back to the menu`));
   }
   const newGame = key !== prevGameKey && !!key;
   if (newGame) log('game-start', state.current);
@@ -300,12 +301,12 @@ function applyTurnLook(ti) {
   b.style.setProperty('--me-ink', `var(--ink${me})`);
   b.classList.toggle('my-turn', !!ti.st && ti.mine);
   b.classList.toggle('their-turn', !!ti.st && !ti.mine);
-  const want = ti.st && ti.mine ? '✏️ תורך! · דף ועיפרון' : 'דף ועיפרון';
+  const want = ti.st && ti.mine ? T('✏️ תורך! · דף ועיפרון', '✏️ Your turn! · Paper & Pencil') : T('דף ועיפרון', 'Paper & Pencil');
   if (document.title !== want) document.title = want;
 }
 
 function turnBanner(G, ctx, ti) {
-  const help = h('button', { class: 'help-btn', 'data-log': 'help', 'aria-label': 'איך משחקים?', title: 'איך משחקים?', onclick: () => showHelp(G, false) }, '?');
+  const help = h('button', { class: 'help-btn', 'data-log': 'help', 'aria-label': T('איך משחקים?', 'How to play?'), title: T('איך משחקים?', 'How to play?'), onclick: () => showHelp(G, false) }, '?');
   if (ti.mine) {
     return h('div', { class: 'turn mine', role: 'status' },
       h('span', { class: 'turn-ico' }, '✏️'), h('span', { class: 'turn-txt' }, ti.st.text), help);
@@ -338,11 +339,11 @@ function showHelp(G, auto) {
     closeHelp();
   };
   helpEl = h('div', { class: 'modal-bg help-bg' },
-    h('div', { class: 'modal card help-card', role: 'dialog', 'aria-label': 'איך משחקים ' + G.title },
-      h('h3', {}, `איך משחקים ${G.title}?`),
+    h('div', { class: 'modal card help-card', role: 'dialog', 'aria-label': T('איך משחקים ', 'How to play ') + G.title },
+      h('h3', {}, T(`איך משחקים ${G.title}?`, `How to play ${G.title}`)),
       h('ul', { class: 'help-list' }, (G.help || []).map(l => h('li', { html: l }))),
-      h('button', { class: 'btn marker', 'data-log': 'help-ok', onclick: done }, 'הבנתי ✓'),
-      auto ? h('div', { class: 'soft help-foot' }, 'אפשר לפתוח שוב בכל רגע עם ה-? למעלה') : null));
+      h('button', { class: 'btn marker', 'data-log': 'help-ok', onclick: done }, T('הבנתי ✓', 'Got it ✓')),
+      auto ? h('div', { class: 'soft help-foot' }, T('אפשר לפתוח שוב בכל רגע עם ה-? למעלה', 'You can open this again any time with the ? at the top')) : null));
   helpEl.addEventListener('click', e => { if (e.target === helpEl) done(); });
   document.body.append(helpEl);
 }
@@ -407,59 +408,59 @@ function header(ctx) {
   const online = link === 'linked';
   const holder = turnInfo(ctx).holder;
   const tag = p => h('div', { class: `ptag p${p}${p === me ? ' me' : ''}${p === holder ? ' holder' : ''}` },
-    p === holder ? h('span', { class: 'holder-ico', title: 'העיפרון אצל ' + (state.players[p].name || '') }, '✏️') : null,
-    p !== me ? h('span', { class: 'dot' + (online ? ' on' : ''), title: online ? 'מחובר' : 'לא מחובר' }) : null,
+    p === holder ? h('span', { class: 'holder-ico', title: T('העיפרון אצל ', 'The pencil is with ') + (state.players[p].name || '') }, '✏️') : null,
+    p !== me ? h('span', { class: 'dot' + (online ? ' on' : ''), title: online ? T('מחובר', 'Connected') : T('לא מחובר', 'Not connected') }) : null,
     h('span', { class: 'pname' }, state.players[p].name || '…'),
     h('span', { class: 'ptot' }, total(p)));
   const joined = !!state.players[1].token;
   return h('header', { class: 'top' },
     h('div', { class: 'top-btns' },
       state.current
-        ? h('button', { class: 'icon-btn', 'data-log': 'to-table', onclick: leaveGame }, '☰', h('span', { class: 'lbl' }, ' טבלה'))
-        : h('div', { class: 'logo' }, 'דף ועיפרון'),
-      joined ? h('button', { class: 'icon-btn chat-btn', 'data-log': 'chat', onclick: openChat }, '✉️', h('span', { class: 'lbl' }, ' פתק'), unread ? h('span', { class: 'badge' }, unread) : null) : null,
+        ? h('button', { class: 'icon-btn', 'data-log': 'to-table', onclick: leaveGame }, '☰', h('span', { class: 'lbl' }, T(' טבלה', ' Table')))
+        : h('div', { class: 'logo' }, T('דף ועיפרון', 'Paper & Pencil')),
+      joined ? h('button', { class: 'icon-btn chat-btn', 'data-log': 'chat', onclick: openChat }, '✉️', h('span', { class: 'lbl' }, T(' פתק', ' Note')), unread ? h('span', { class: 'badge' }, unread) : null) : null,
       joined ? h('button', {
-        class: 'icon-btn sound-btn', 'data-log': soundOn() ? 'sound-off' : 'sound-on', 'aria-label': soundOn() ? 'השתקת צלילים' : 'הפעלת צלילים',
-        onclick: () => { setSound(!soundOn()); track('sound_toggled', { on: soundOn() }); toast(soundOn() ? 'צלילים פועלים 🔔' : 'צלילים כבויים 🔕'); if (soundOn()) play('turn'); render(); },
+        class: 'icon-btn sound-btn', 'data-log': soundOn() ? 'sound-off' : 'sound-on', 'aria-label': soundOn() ? T('השתקת צלילים', 'Mute sounds') : T('הפעלת צלילים', 'Turn sounds on'),
+        onclick: () => { setSound(!soundOn()); track('sound_toggled', { on: soundOn() }); toast(soundOn() ? T('צלילים פועלים 🔔', 'Sounds on 🔔') : T('צלילים כבויים 🔕', 'Sounds off 🔕')); if (soundOn()) play('turn'); render(); },
       }, soundOn() ? '🔔' : '🔕') : null),
-    h('div', { class: 'players' }, tag(0), h('span', { class: 'vs' }, 'נגד'), tag(1)));
+    h('div', { class: 'players' }, tag(0), h('span', { class: 'vs' }, T('נגד', 'vs')), tag(1)));
 }
 
 function connNote() {
   const joined = !!(state && state.players[1].token);
-  const other = (state && state.players[1 - me].name) || (me === 0 ? 'השותף' : 'המארח');
+  const other = (state && state.players[1 - me].name) || (me === 0 ? T('השותף', 'your partner') : T('המארח', 'the host'));
   const code = session.code;
   let title, lines = [], busy = false, retry = false;
   if (link === 'offline') {
-    title = 'אין אינטרנט בטלפון הזה';
-    lines = ['בדקו שה-WiFi או הגלישה פועלים.', 'ממשיכים לנסות לבד – אין צורך לרענן.'];
+    title = T('אין אינטרנט בטלפון הזה', 'No internet on this phone');
+    lines = [T('בדקו שה-WiFi או הגלישה פועלים.', 'Check that Wi-Fi or mobile data is on.'), T('ממשיכים לנסות לבד – אין צורך לרענן.', 'We keep trying by ourselves – no need to refresh.')];
     busy = true; retry = true;
   } else if (link === 'full') {
-    title = 'בדף הזה כבר משחקים שניים';
-    lines = ['החלפתם טלפון? אצל מי שפתח את הדף: בתפריט לוחצים "החלפת שותף", ואז כאן "לנסות שוב".'];
+    title = T('בדף הזה כבר משחקים שניים', 'Two people are already playing on this page');
+    lines = [T('החלפתם טלפון? אצל מי שפתח את הדף: בתפריט לוחצים "החלפת שותף", ואז כאן "לנסות שוב".', 'Changed phones? On the phone that opened the page, tap "Replace partner" in the menu, then tap "Try again" here.')];
     retry = true;
   } else if (me === 0) {
-    title = joined ? `מחכים ש${other} יחזור/תחזור…` : 'מחכים שמישהו יצטרף…';
+    title = joined ? T(`מחכים ש${other} יחזור/תחזור…`, `Waiting for ${other} to come back…`) : T('מחכים שמישהו יצטרף…', 'Waiting for someone to join…');
     lines = joined
-      ? ['המשחק שמור ולא הולך לאיבוד.', `אצל ${other}: פותחים שוב את המשחק (אותו קישור) והוא ממשיך מאותה נקודה.`]
-      : [`הקוד של הדף: ${code}`];
+      ? [T('המשחק שמור ולא הולך לאיבוד.', 'The game is saved and won\'t be lost.'), T(`אצל ${other}: פותחים שוב את המשחק (אותו קישור) והוא ממשיך מאותה נקודה.`, `${other} just needs to open the game again (same link) and it continues where you left off.`)]
+      : [T(`הקוד של הדף: ${code}`, `Page code: ${code}`)];
     busy = true;
   } else if (link === 'no-host') {
-    title = `הדף של ${other} לא עונה`;
-    lines = [`1. אצל ${other}: המשחק פתוח על המסך? (לא ברקע, לא נעול)`, `2. הקוד נכון? נכנסתם לדף ${code}`, '3. לשני הטלפונים יש אינטרנט?', 'ברגע שהדף השני יתעורר – מתחברים לבד.'];
+    title = T(`הדף של ${other} לא עונה`, `${other}\'s page is not answering`);
+    lines = [T(`1. אצל ${other}: המשחק פתוח על המסך? (לא ברקע, לא נעול)`, `1. Is the game open on ${other}\'s screen? (not in the background, not locked)`), T(`2. הקוד נכון? נכנסתם לדף ${code}`, `2. Is the code right? You joined page ${code}`), T('3. לשני הטלפונים יש אינטרנט?', '3. Do both phones have internet?'), T('ברגע שהדף השני יתעורר – מתחברים לבד.', 'As soon as the other page wakes up, you\'ll connect by yourselves.')];
     busy = true; retry = true;
   } else {
-    title = state ? `החיבור ל${other} נפל – מתחברים מחדש…` : `מתחברים לדף ${code}…`;
-    lines = [state ? 'המשחק שמור. אין צורך לעשות כלום.' : 'זה לוקח כמה שניות.'];
+    title = state ? T(`החיבור ל${other} נפל – מתחברים מחדש…`, `Lost the connection to ${other} – reconnecting…`) : T(`מתחברים לדף ${code}…`, `Connecting to page ${code}…`);
+    lines = [state ? T('המשחק שמור. אין צורך לעשות כלום.', 'The game is saved. Nothing to do.') : T('זה לוקח כמה שניות.', 'This takes a few seconds.')];
     busy = true;
   }
   return h('div', { class: 'note warn conn' },
     h('div', { class: 'conn-title' }, busy ? h('span', { class: 'spin' }) : '⚠️ ', title),
     lines.map(l => h('div', { class: 'conn-line' }, l)),
     h('div', { class: 'conn-actions' },
-      retry ? h('button', { class: 'btn small marker', 'data-log': 'retry', onclick: () => { net && net.wake(); toast('מנסה שוב…'); } }, 'לנסות שוב') : null,
-      h('button', { class: 'link-btn', 'data-log': 'leave', onclick: () => (state ? askLeaveRoom() : leaveRoom()) }, state ? 'יציאה מהדף' : 'ביטול'),
-      h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, 'משהו לא עובד?')));
+      retry ? h('button', { class: 'btn small marker', 'data-log': 'retry', onclick: () => { net && net.wake(); toast(T('מנסה שוב…', 'Trying again…')); } }, T('לנסות שוב', 'Try again')) : null,
+      h('button', { class: 'link-btn', 'data-log': 'leave', onclick: () => (state ? askLeaveRoom() : leaveRoom()) }, state ? T('יציאה מהדף', 'Leave the page') : T('ביטול', 'Cancel')),
+      h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, T('משהו לא עובד?', 'Something not working?'))));
 }
 
 /** "something is wrong" sheet: plain-language checklist + technical details + send a report */
@@ -474,16 +475,16 @@ function showTech() {
   const close = () => { techOpen = false; bg.remove(); };
   bg.addEventListener('click', e => { if (e.target === bg) close(); });
   bg.append(h('div', { class: 'modal card tech' },
-    h('h3', {}, 'משהו לא עובד?'),
+    h('h3', {}, T('משהו לא עובד?', 'Something not working?')),
     h('ol', { class: 'help' },
-      h('li', {}, 'שני הטלפונים צריכים להיות עם המשחק פתוח על המסך.'),
-      h('li', {}, 'בודקים שיש אינטרנט בשניהם (אפשר לנסות לכבות ולהדליק WiFi).'),
-      h('li', {}, 'לוחצים "לנסות שוב", ואם לא עוזר – מרעננים את הדף. המשחק שמור.')),
+      h('li', {}, T('שני הטלפונים צריכים להיות עם המשחק פתוח על המסך.', 'Both phones need the game open on the screen.')),
+      h('li', {}, T('בודקים שיש אינטרנט בשניהם (אפשר לנסות לכבות ולהדליק WiFi).', 'Check that both have internet (try turning Wi-Fi off and on).')),
+      h('li', {}, T('לוחצים "לנסות שוב", ואם לא עוזר – מרעננים את הדף. המשחק שמור.', 'Tap "Try again". If that doesn\'t help, refresh the page. The game is saved.'))),
     h('div', { class: 'tech-box' },
-      h('div', {}, `מזהה מכשיר: `, h('b', {}, logDev), ` · גרסה ${VERSION}`),
-      h('div', {}, `מצב: ${info.status} · שרתי תיווך: ${up}/${relays.length}`),
+      h('div', {}, T(`מזהה מכשיר: `, `Device ID: `), h('b', {}, logDev), T(` · גרסה ${VERSION}`, ` · version ${VERSION}`)),
+      h('div', {}, T(`מצב: ${info.status} · שרתי תיווך: ${up}/${relays.length}`, `Status: ${info.status} · relay servers: ${up}/${relays.length}`)),
       h('div', {}, info.channels.map(c => `${c.open ? '✓' : '✗'} ${c.name.replace('relay:', '')}`).join('  ')),
-      h('div', {}, `אינטרנט: ${navigator.onLine ? 'יש' : 'אין'}`)),
+      h('div', {}, T(`אינטרנט: ${navigator.onLine ? 'יש' : 'אין'}`, `Internet: ${navigator.onLine ? 'yes' : 'no'}`))),
     h('div', { class: 'row center' },
       h('button', {
         class: 'btn marker small', 'data-log': 'send-report', onclick: async e => {
@@ -491,22 +492,22 @@ function showTech() {
           log('report', net ? net.info() : null, true);
           track('problem_reported', { status: net ? net.info().status : '-', screen: lastView, log_device: logDev }, { now: true });
           const ok = await flushLog(true);
-          toast(ok ? `הדיווח נשלח ✓ (מזהה ${logDev})` : 'לא הצלחתי לשלוח – אין אינטרנט?');
+          toast(ok ? T(`הדיווח נשלח ✓ (מזהה ${logDev})`, `Report sent ✓ (ID ${logDev})`) : T('לא הצלחתי לשלוח – אין אינטרנט?', 'Could not send – no internet?'));
           e.target.disabled = false;
         },
-      }, 'שליחת דיווח תקלה'),
-      h('button', { class: 'btn ghost small', onclick: close }, 'סגירה')),
+      }, T('שליחת דיווח תקלה', 'Send a problem report')),
+      h('button', { class: 'btn ghost small', onclick: close }, T('סגירה', 'Close'))),
     h('pre', { class: 'tech-log' }, logRing.slice(-14).join('\n'))));
   document.body.append(bg);
 }
 
 async function askLeaveRoom() {
-  if (await confirmBox('לצאת מהדף הזה? (אפשר לחזור עם הקוד)', 'יציאה', 'ביטול')) leaveRoom();
+  if (await confirmBox(T('לצאת מהדף הזה? (אפשר לחזור עם הקוד)', 'Leave this page? (you can come back with the code)'), T('יציאה', 'Leave'), T('ביטול', 'Cancel'))) leaveRoom();
 }
 
 async function leaveGame() {
   if (state.game && !state.game.over) {
-    const yes = await confirmBox('לעצור ולחזור לטבלה? המשחק הזה יתחיל אחר כך מההתחלה.', 'כן, לטבלה', 'להמשיך לשחק');
+    const yes = await confirmBox(T('לעצור ולחזור לטבלה? המשחק הזה יתחיל אחר כך מההתחלה.', 'Stop and go back to the table? This game will start over next time.'), T('כן, לטבלה', 'Yes, to the table'), T('להמשיך לשחק', 'Keep playing'));
     track('leave_game_prompt', { game: state.current, confirmed: yes });
     if (!yes) return;
   }
@@ -515,13 +516,13 @@ async function leaveGame() {
 
 async function askNewSeries() {
   const mid = state.series.results.length > 0 && !seriesDone(state) && seriesDecided(state) == null;
-  if (mid && !await confirmBox('להתחיל סדרה חדשה? הסדרה הנוכחית תיסגר בלי מנצח.', 'כן, סדרה חדשה', 'ביטול')) return;
+  if (mid && !await confirmBox(T('להתחיל סדרה חדשה? הסדרה הנוכחית תיסגר בלי מנצח.', 'Start a new series? The current one will close with no winner.'), T('כן, סדרה חדשה', 'Yes, new series'), T('ביטול', 'Cancel'))) return;
   act({ k: 'newSeries' });
 }
 
 async function askReplay() {
   const G = BY[state.current];
-  const yes = await confirmBox(`לשחק שוב את "${G.title}"? התוצאה של המשחק הזה תימחק.`, 'כן, משחק חוזר', 'ביטול');
+  const yes = await confirmBox(T(`לשחק שוב את "${G.title}"? התוצאה של המשחק הזה תימחק.`, `Play "${G.title}" again? The result of this game will be erased.`), T('כן, משחק חוזר', 'Yes, rematch'), T('ביטול', 'Cancel'));
   track('rematch_prompt', { game: G.id, confirmed: yes });
   if (yes) act({ k: 'replay' });
 }
@@ -531,7 +532,7 @@ function seriesLine(ctx, big) {
   const w = seriesWins(state);
   return h('div', { class: 'series-line' + (big ? ' big' : '') },
     h('b', { class: 'ink0' }, ctx.names[0]), h('span', { class: 'sc' }, h('b', { class: 'ink0' }, w[0]), h('span', {}, ':'), h('b', { class: 'ink1' }, w[1])), h('b', { class: 'ink1' }, ctx.names[1]),
-    w[2] ? h('small', { class: 'soft' }, ` (תיקו: ${w[2]})`) : null);
+    w[2] ? h('small', { class: 'soft' }, T(` (תיקו: ${w[2]})`, ` (ties: ${w[2]})`)) : null);
 }
 
 /** the headline of a series that is decided / finished, or null */
@@ -539,29 +540,29 @@ function seriesVerdict(ctx) {
   const dec = seriesDecided(state), done = seriesDone(state);
   if (dec == null && !done) return null;
   const w = dec != null ? dec : seriesLeader(state);
-  if (w == null) return { text: 'הסדרה נגמרה בתיקו! 🤝', color: 'var(--pencil)', done, w };
+  if (w == null) return { text: T('הסדרה נגמרה בתיקו! 🤝', 'The series ended in a tie! 🤝'), color: 'var(--pencil)', done, w };
   const sw = seriesWins(state);
   const score = `${Math.max(sw[0], sw[1])}:${Math.min(sw[0], sw[1])}`;
-  return { text: (w === me ? `ניצחת את הסדרה ${score}! 🏆` : `${ctx.names[w]} ניצח/ה את הסדרה ${score}! 🏆`), color: `var(--ink${w})`, done, w };
+  return { text: (w === me ? T(`ניצחת את הסדרה ${score}! 🏆`, `You won the series ${score}! 🏆`) : T(`${ctx.names[w]} ניצח/ה את הסדרה ${score}! 🏆`, `${ctx.names[w]} won the series ${score}! 🏆`)), color: `var(--ink${w})`, done, w };
 }
 
 function seriesButtons(inResult) {
   const done = seriesDone(state), dec = seriesDecided(state);
   const nx = nextGame(state);
   const out = [];
-  if (done) out.push(h('button', { class: 'btn marker', 'data-log': 'new-series', onclick: askNewSeries }, 'סדרה חדשה ✏️'));
+  if (done) out.push(h('button', { class: 'btn marker', 'data-log': 'new-series', onclick: askNewSeries }, T('סדרה חדשה ✏️', 'New series ✏️')));
   else {
     const played = state.series.results.length;
-    const label = dec != null ? `ממשיכים בשביל הספורט: ${BY[nx].title} ←` : inResult ? `למשחק הבא: ${BY[nx].title} ←` : `${played ? 'ממשיכים' : 'מתחילים'}: ${BY[nx].title} ←`;
+    const label = dec != null ? T(`ממשיכים בשביל הספורט: ${BY[nx].title} ←`, `Play on for fun: ${BY[nx].title} →`) : inResult ? T(`למשחק הבא: ${BY[nx].title} ←`, `Next game: ${BY[nx].title} →`) : T(`${played ? 'ממשיכים' : 'מתחילים'}: ${BY[nx].title} ←`, `${played ? 'Continue' : 'Start'}: ${BY[nx].title} →`);
     out.push(h('button', { class: 'btn marker', 'data-log': 'next:' + nx, disabled: !state.players[1].token, onclick: () => act({ k: 'next' }) }, label));
-    if (dec != null) out.push(h('button', { class: 'btn', 'data-log': 'new-series', onclick: askNewSeries }, 'סדרה חדשה'));
+    if (dec != null) out.push(h('button', { class: 'btn', 'data-log': 'new-series', onclick: askNewSeries }, T('סדרה חדשה', 'New series')));
   }
   return out;
 }
 
 function resultCard(G, ctx) {
   const w = state.game.over.winner;
-  const title = w == null ? 'תיקו!' : w === me ? 'ניצחת! 🏆' : `נקודה ל${ctx.names[w]}`;
+  const title = w == null ? T('תיקו!', 'Tie!') : w === me ? T('ניצחת! 🏆', 'You won! 🏆') : T(`נקודה ל${ctx.names[w]}`, `A point for ${ctx.names[w]}`);
   const color = w == null ? 'var(--pencil)' : `var(--ink${w})`;
   const detail = G.overDetail ? G.overDetail(state.game, ctx) : null;
   const inSeries = state.game.sidx >= 0;
@@ -572,14 +573,14 @@ function resultCard(G, ctx) {
     detail ? h('p', {}, detail) : null,
     inSeries ? seriesLine(ctx) : null,
     verdict ? h('div', { class: 'verdict', style: { color: verdict.color } }, verdict.text) : null,
-    verdict && !verdict.done ? h('p', { class: 'soft', style: { margin: '2px 0 8px' } }, 'רוצים להמשיך עד הסוף בשביל הספורט?') : null,
+    verdict && !verdict.done ? h('p', { class: 'soft', style: { margin: '2px 0 8px' } }, T('רוצים להמשיך עד הסוף בשביל הספורט?', 'Want to play on to the end, just for fun?')) : null,
     h('div', { class: 'row center' }, inSeries ? seriesButtons(true) : null),
     h('div', { class: 'row center', style: { marginTop: '6px' } },
-      canReplay ? h('button', { class: 'btn ghost small', 'data-log': 'replay', onclick: askReplay }, '↺ משחק חוזר') : null,
-      h('button', { class: 'btn ghost small', 'data-log': 'to-table', onclick: () => act({ k: 'menu' }) }, 'לטבלה')));
+      canReplay ? h('button', { class: 'btn ghost small', 'data-log': 'replay', onclick: askReplay }, T('↺ משחק חוזר', '↺ Rematch')) : null,
+      h('button', { class: 'btn ghost small', 'data-log': 'to-table', onclick: () => act({ k: 'menu' }) }, T('לטבלה', 'To the table'))));
 }
 
-const TOGETHER = 'הכי כיף כשיושבים אחד ליד השני – או מדברים בטלפון (על רמקול) תוך כדי המשחק. חצי מהכיף זה הדיבורים 🙂';
+const TOGETHER = T('הכי כיף כשיושבים אחד ליד השני – או מדברים בטלפון (על רמקול) תוך כדי המשחק. חצי מהכיף זה הדיבורים 🙂', 'It\'s most fun sitting next to each other – or talking on the phone (on speaker) while you play. Half the fun is the chatting 🙂');
 
 function shareUrl() {
   const u = new URL(location.href);
@@ -593,34 +594,34 @@ function shareUrl() {
 
 async function shareInvite(from) {
   const url = shareUrl();
-  const text = `בוא/י לשחק איתי בדף ועיפרון ✏️ (ותתקשר/י אליי – נדבר תוך כדי!) קוד: ${session.code}`;
+  const text = T(`בוא/י לשחק איתי בדף ועיפרון ✏️ (ותתקשר/י אליי – נדבר תוך כדי!) קוד: ${session.code}`, `Come play Paper & Pencil with me ✏️ (and call me – we\'ll talk while we play!) Code: ${session.code}`);
   const where = typeof from === 'string' ? from : 'invite_card';
   if (navigator.share) {
-    try { await navigator.share({ title: 'דף ועיפרון', text, url }); track('invite_shared', { method: 'native_share', from: where }); return; } catch (e) {
+    try { await navigator.share({ title: T('דף ועיפרון', 'Paper & Pencil'), text, url }); track('invite_shared', { method: 'native_share', from: where }); return; } catch (e) {
       if (e && e.name === 'AbortError') { track('invite_share_cancelled', { from: where }); return; }
     }
   }
-  try { await navigator.clipboard.writeText(url); toast('הקישור הועתק 📋'); track('invite_shared', { method: 'copy_link', from: where }); } catch { prompt('העתיקו את הקישור:', url); track('invite_shared', { method: 'manual_copy', from: where }); }
+  try { await navigator.clipboard.writeText(url); toast(T('הקישור הועתק 📋', 'Link copied 📋')); track('invite_shared', { method: 'copy_link', from: where }); } catch { prompt(T('העתיקו את הקישור:', 'Copy the link:'), url); track('invite_shared', { method: 'manual_copy', from: where }); }
 }
 
 function inviteCard() {
   const url = shareUrl();
   const offline = link === 'offline';
   return h('div', { class: 'card center' },
-    h('h3', {}, 'מזמינים שותף לדף'),
-    h('div', {}, 'הקוד של הדף:'),
+    h('h3', {}, T('מזמינים שותף לדף', 'Invite a partner')),
+    h('div', {}, T('הקוד של הדף:', 'Page code:')),
     h('div', { class: 'code-big' }, session.code),
     h('ol', { class: 'help' },
-      h('li', {}, 'שולחים הזמנה לטלפון השני (כפתור למטה).'),
-      h('li', {}, 'בטלפון השני פותחים את הקישור וכותבים שם.'),
-      h('li', {}, h('b', {}, 'חוזרים לכאן'), ' – הדף הזה צריך להישאר פתוח על המסך.')),
-    h('div', { class: 'note tip' }, '📞 לא באותו חדר? תתקשרו אחד לשני ושימו על רמקול – ככה זה מרגיש כמו פעם.'),
+      h('li', {}, T('שולחים הזמנה לטלפון השני (כפתור למטה).', 'Send an invite to the other phone (button below).')),
+      h('li', {}, T('בטלפון השני פותחים את הקישור וכותבים שם.', 'On the other phone, open the link and type a name.')),
+      h('li', {}, h('b', {}, T('חוזרים לכאן', 'Come back here')), T(' – הדף הזה צריך להישאר פתוח על המסך.', ' – this page needs to stay open on the screen.'))),
+    h('div', { class: 'note tip' }, T('📞 לא באותו חדר? תתקשרו אחד לשני ושימו על רמקול – ככה זה מרגיש כמו פעם.', '📞 Not in the same room? Call each other and put it on speaker – it feels just like the old days.')),
     h('div', { class: 'row center' },
-      h('button', { class: 'btn marker', 'data-log': 'share', onclick: shareInvite }, '📤 שליחת הזמנה'),
-      h('a', { class: 'btn', 'data-log': 'whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent('בוא/י לשחק איתי בדף ועיפרון ✏️ תתקשר/י אליי ונדבר תוך כדי המשחק 📞 ' + url), target: '_blank', rel: 'noopener', onclick: () => track('invite_shared', { method: 'whatsapp', from: 'invite_card' }, { now: true }) }, 'וואטסאפ')),
+      h('button', { class: 'btn marker', 'data-log': 'share', onclick: shareInvite }, T('📤 שליחת הזמנה', '📤 Send invite')),
+      h('a', { class: 'btn', 'data-log': 'whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent(T('בוא/י לשחק איתי בדף ועיפרון ✏️ תתקשר/י אליי ונדבר תוך כדי המשחק 📞 ', 'Come play Paper & Pencil with me ✏️ Call me and we\'ll talk while we play 📞 ') + url), target: '_blank', rel: 'noopener', onclick: () => track('invite_shared', { method: 'whatsapp', from: 'invite_card' }, { now: true }) }, T('וואטסאפ', 'WhatsApp'))),
     h('div', { class: 'wait-line' + (offline ? ' bad' : '') },
-      offline ? '⚠️ אין אינטרנט בטלפון הזה – בדקו WiFi / גלישה' : [h('span', { class: 'spin' }), 'מחכים שמישהו יצטרף…']),
-    h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, 'משהו לא עובד?'));
+      offline ? T('⚠️ אין אינטרנט בטלפון הזה – בדקו WiFi / גלישה', '⚠️ No internet on this phone – check Wi-Fi / mobile data') : [h('span', { class: 'spin' }), T('מחכים שמישהו יצטרף…', 'Waiting for someone to join…')]),
+    h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, T('משהו לא עובד?', 'Something not working?')));
 }
 
 function menuView(ctx) {
@@ -633,15 +634,15 @@ function menuView(ctx) {
   const done = seriesDone(state);
   const verdict = seriesVerdict(ctx);
   wrap.append(
-    h('h1', { class: 'title' }, `סדרה ${state.series.n}`),
-    h('div', { class: 'center soft', style: { marginTop: '-4px' } }, 'הטוב מחמישה · משחקים לפי הסדר'));
+    h('h1', { class: 'title' }, T(`סדרה ${state.series.n}`, `Series ${state.series.n}`)),
+    h('div', { class: 'center soft', style: { marginTop: '-4px' } }, T('הטוב מחמישה · משחקים לפי הסדר', 'Best of five · played in order')));
 
   GAMES.forEach((G, i) => {
     const r = res[i];
     const isNext = !done && i === res.length;
     let mark;
-    if (r) mark = r.winner == null ? h('span', { class: 'soft' }, 'תיקו') : h('b', { class: 'ink' + r.winner }, '✓ ' + ctx.names[r.winner]);
-    else if (isNext) mark = h('span', { class: 'next-arrow' }, joined ? 'עכשיו ←' : '');
+    if (r) mark = r.winner == null ? h('span', { class: 'soft' }, T('תיקו', 'Tie')) : h('b', { class: 'ink' + r.winner }, '✓ ' + ctx.names[r.winner]);
+    else if (isNext) mark = h('span', { class: 'next-arrow' }, joined ? T('עכשיו ←', 'Now →') : '');
     else mark = h('span', { class: 'soft' }, '·');
     wrap.append(h('div', { class: 'game-row' + (r ? ' done' : isNext && joined ? ' next' : ' later') },
       h('span', { class: 'num' }, i + 1),
@@ -651,53 +652,53 @@ function menuView(ctx) {
 
   wrap.append(seriesLine(ctx, true));
   if (verdict) wrap.append(h('div', { class: 'verdict center', style: { color: verdict.color } }, verdict.text));
-  if (verdict && !verdict.done) wrap.append(h('p', { class: 'center soft', style: { margin: '2px 0' } }, 'רוצים להמשיך עד הסוף בשביל הספורט?'));
+  if (verdict && !verdict.done) wrap.append(h('p', { class: 'center soft', style: { margin: '2px 0' } }, T('רוצים להמשיך עד הסוף בשביל הספורט?', 'Want to play on to the end, just for fun?')));
   if (joined) wrap.append(h('div', { class: 'row center mt' }, seriesButtons(false)));
   if (!res.length) wrap.append(h('div', { class: 'note tip' }, '💡 ', TOGETHER));
 
   const ev = state.evening;
   if (ev[0] + ev[1] + ev[2] > 0) {
     wrap.append(h('div', { class: 'card evening' },
-      h('b', {}, 'סדרות הערב'),
+      h('b', {}, T('סדרות הערב', 'Tonight\'s series')),
       [0, 1].map(p => h('div', { class: 'ev-row ink' + p }, h('span', {}, ctx.names[p]), tally(ev[p], p))),
-      ev[2] ? h('div', { class: 'soft' }, `סדרות בתיקו: ${ev[2]}`) : null));
+      ev[2] ? h('div', { class: 'soft' }, T(`סדרות בתיקו: ${ev[2]}`, `Tied series: ${ev[2]}`)) : null));
   }
 
   const foot = h('div', { class: 'menu-foot' });
-  if (joined && !done) foot.append(h('button', { class: 'link-btn', 'data-log': 'new-series', onclick: askNewSeries }, 'סדרה חדשה'));
-  if (me === 0 && joined) foot.append(h('button', { class: 'link-btn', 'data-log': 'code', onclick: () => shareInvite('menu_code') }, `קוד הדף: ${session.code}`));
+  if (joined && !done) foot.append(h('button', { class: 'link-btn', 'data-log': 'new-series', onclick: askNewSeries }, T('סדרה חדשה', 'New series')));
+  if (me === 0 && joined) foot.append(h('button', { class: 'link-btn', 'data-log': 'code', onclick: () => shareInvite('menu_code') }, T(`קוד הדף: ${session.code}`, `Page code: ${session.code}`)));
   if (ev[0] + ev[1] + ev[2] > 0) foot.append(h('button', {
     class: 'link-btn', 'data-log': 'reset-evening', onclick: async () => {
-      if (await confirmBox('למחוק את כל הניקוד של הערב ולהתחיל מאפס?', 'כן, מאפס', 'ביטול')) act({ k: 'resetEvening' }); // tracked as evening_reset
+      if (await confirmBox(T('למחוק את כל הניקוד של הערב ולהתחיל מאפס?', 'Erase all of tonight\'s scores and start from zero?'), T('כן, מאפס', 'Yes, start over'), T('ביטול', 'Cancel'))) act({ k: 'resetEvening' }); // tracked as evening_reset
     },
-  }, 'איפוס הערב'));
+  }, T('איפוס הערב', 'Reset tonight')));
   if (me === 0 && joined) foot.append(h('button', {
     class: 'link-btn', 'data-log': 'replace-partner', onclick: async () => {
-      if (!await confirmBox('לאפשר לטלפון אחר להצטרף במקום השותף הנוכחי?', 'כן', 'ביטול')) return;
+      if (!await confirmBox(T('לאפשר לטלפון אחר להצטרף במקום השותף הנוכחי?', 'Let another phone join instead of your current partner?'), T('כן', 'Yes'), T('ביטול', 'Cancel'))) return;
       const s = structuredClone(state);
       // the phone that is being replaced may not grab the seat back
       s.banned = [...(s.banned || []), s.players[1].token].filter(Boolean).slice(-6);
       s.players[1].token = null;
       commit(s);
       track('partner_replaced', { room_id: s.sid, series_n: s.series.n });
-      toast('עכשיו טלפון אחר יכול להצטרף עם הקוד ' + session.code);
+      toast(T('עכשיו טלפון אחר יכול להצטרף עם הקוד ', 'Another phone can now join with the code ') + session.code);
     },
-  }, 'החלפת שותף'));
-  foot.append(h('button', { class: 'link-btn', 'data-log': 'leave', onclick: askLeaveRoom }, 'יציאה מהדף'));
-  foot.append(h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, 'משהו לא עובד?'));
+  }, T('החלפת שותף', 'Replace partner')));
+  foot.append(h('button', { class: 'link-btn', 'data-log': 'leave', onclick: askLeaveRoom }, T('יציאה מהדף', 'Leave the page')));
+  foot.append(h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, T('משהו לא עובד?', 'Something not working?')));
   wrap.append(foot);
   return wrap;
 }
 
 function renderConnecting() {
   app.replaceChildren(
-    h('header', { class: 'top' }, h('div', { class: 'logo' }, 'דף ועיפרון')),
+    h('header', { class: 'top' }, h('div', { class: 'logo' }, T('דף ועיפרון', 'Paper & Pencil'))),
     connNote());
 }
 
 /* ======================= chat ("passing notes") ======================= */
 
-const QUICK = ['😂', '👏', 'חחח', 'כל הכבוד!', 'לא הוגן!! 😤', 'רגע, חושב…', 'קדימה, תורך!', 'משחק חוזר?', 'תתקשר אליי 📞', '❤️'];
+const QUICK = ['😂', '👏', T('חחח', 'LOL'), T('כל הכבוד!', 'Well done!'), T('לא הוגן!! 😤', 'Not fair!! 😤'), T('רגע, חושב…', 'Wait, thinking…'), T('קדימה, תורך!', 'Come on, your turn!'), T('משחק חוזר?', 'Rematch?'), T('תתקשר אליי 📞', 'Call me 📞'), '❤️'];
 let sheetEl = null;
 
 // the chat button lives in the top bar (a floating button used to cover keys on small phones)
@@ -708,7 +709,7 @@ function openChat() {
   chatOpen = true; unread = 0;
   render();
   const bg = h('div', { class: 'sheet-bg', onclick: closeChat });
-  const input = h('input', { class: 'paper', placeholder: 'לכתוב פתק…', maxlength: 240, enterkeyhint: 'send' });
+  const input = h('input', { class: 'paper', placeholder: T('לכתוב פתק…', 'Write a note…'), maxlength: 240, enterkeyhint: 'send' });
   const send = (text, quick) => {
     if (!text.trim()) return;
     act({ k: 'chat', text });
@@ -718,13 +719,13 @@ function openChat() {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { send(input.value); input.value = ''; } });
   sheetEl = h('div', { class: 'sheet' },
     h('div', { class: 'row', style: { justifyContent: 'space-between' } },
-      h('h3', {}, 'פתקים'),
+      h('h3', {}, T('פתקים', 'Notes')),
       h('button', { class: 'icon-btn', onclick: closeChat }, '✕')),
     h('div', { class: 'msgs' }),
     h('div', { class: 'quick' }, QUICK.map(q => h('button', { onclick: () => send(q, true) }, q))),
     h('div', { class: 'row', style: { flexWrap: 'nowrap' } },
       input,
-      h('button', { class: 'btn small marker', onclick: () => { send(input.value); input.value = ''; input.focus(); } }, 'שלח')));
+      h('button', { class: 'btn small marker', onclick: () => { send(input.value); input.value = ''; input.focus(); } }, T('שלח', 'Send'))));
   sheetEl._bg = bg;
   document.body.append(bg, sheetEl);
   renderChat();
@@ -741,56 +742,61 @@ function renderChat() {
   box.replaceChildren(...(state.chat.length ? state.chat.map(m =>
     h('div', { class: 'msg ' + (m.p === me ? 'mine' : 'theirs'), style: { color: `var(--ink${m.p})` } },
       h('b', {}, state.players[m.p].name), m.text))
-    : [h('p', { class: 'soft center' }, 'עוד אין פתקים. אפשר לכתוב משהו מצחיק 🙂')]));
+    : [h('p', { class: 'soft center' }, T('עוד אין פתקים. אפשר לכתוב משהו מצחיק 🙂', 'No notes yet. Write something funny 🙂'))]));
   box.scrollTop = box.scrollHeight;
 }
 
 /* ======================= home / join ======================= */
 
 function homeView(room) {
-  const nameIn = h('input', { class: 'paper', placeholder: 'השם שלי', maxlength: 14, value: store.get('name', '') });
+  const nameIn = h('input', { class: 'paper', placeholder: T('השם שלי', 'My name'), maxlength: 14, value: store.get('name', '') });
   const codeIn = h('input', { class: 'paper code', placeholder: '____', inputmode: 'numeric', maxlength: 4, value: room || '' });
   const getName = () => {
     const n = nameIn.value.trim();
-    if (!n) { toast('קודם כותבים שם 🙂'); nameIn.focus(); track('name_missing', { screen: room ? 'join' : 'home' }); return null; }
+    if (!n) { toast(T('קודם כותבים שם 🙂', 'Type your name first 🙂')); nameIn.focus(); track('name_missing', { screen: room ? 'join' : 'home' }); return null; }
     store.set('name', n);
     return cleanName(n);
   };
   const join = via => {
     const n = getName(); if (!n) return;
     const code = codeIn.value.replace(/\D/g, '');
-    if (code.length !== 4) { toast('הקוד הוא 4 ספרות'); codeIn.focus(); track('join_code_invalid', { length: code.length }); return; }
+    if (code.length !== 4) { toast(T('הקוד הוא 4 ספרות', 'The code is 4 digits')); codeIn.focus(); track('join_code_invalid', { length: code.length }); return; }
     startGuest(n, code, via === 'invite_link' ? 'invite_link' : 'typed_code');
   };
   const doodle = h('div', { class: 'center', style: { fontSize: '15px', margin: '4px 0 6px' }, html:
-    'בול פגיעה · איש תלוי · צוללות · נקודות · 5 בשורה' });
+    T('בול פגיעה · איש תלוי · צוללות · נקודות · 5 בשורה', 'Bulls & Cows · Hangman · Battleships · Dots & Boxes · Five in a Row') });
+  const other = LANG === 'he' ? 'en' : 'he';
   const kids = [
-    h('h1', { class: 'center', style: { fontSize: '64px', marginTop: '22px' } }, 'דף ועיפרון'),
+    h('div', { class: 'lang-switch' }, h('button', {
+      class: 'link-btn', 'data-log': 'lang-' + other, lang: other,
+      onclick: async () => { track('language_switched', { from: LANG, to: other, screen: room ? 'join' : 'home' }, { now: true }); await flushAnalytics(true); setLang(other); },
+    }, other === 'en' ? 'English' : 'עברית')),
+    h('h1', { class: 'center', style: { fontSize: '64px', marginTop: '22px' } }, T('דף ועיפרון', 'Paper & Pencil')),
     doodle,
-    h('p', { class: 'center soft' }, 'כל אחד עם הטלפון שלו – כמו הדף שהיה לכל אחד מול העיניים.'),
+    h('p', { class: 'center soft' }, T('כל אחד עם הטלפון שלו – כמו הדף שהיה לכל אחד מול העיניים.', 'Each on your own phone – just like each of you had your own sheet of paper.')),
     h('div', { class: 'note tip' }, '💡 ', TOGETHER),
-    h('div', { class: 'card stack' }, h('label', {}, 'איך קוראים לך?'), nameIn),
+    h('div', { class: 'card stack' }, h('label', {}, T('איך קוראים לך?', 'What\'s your name?')), nameIn),
   ];
   if (room) {
     kids.push(h('div', { class: 'card stack center' },
-      h('h3', {}, 'הוזמנת לשחק!'),
-      h('div', {}, 'קוד הדף'), h('div', { class: 'code-big' }, room),
-      h('button', { class: 'btn big marker', onclick: () => { codeIn.value = room; join('invite_link'); } }, 'הצטרפות ✏️')));
+      h('h3', {}, T('הוזמנת לשחק!', 'You\'re invited to play!')),
+      h('div', {}, T('קוד הדף', 'Page code')), h('div', { class: 'code-big' }, room),
+      h('button', { class: 'btn big marker', onclick: () => { codeIn.value = room; join('invite_link'); } }, T('הצטרפות ✏️', 'Join ✏️'))));
   } else {
     kids.push(
-      h('button', { class: 'btn big marker mt', onclick: () => { const n = getName(); if (n) startHost(n); } }, '📄 פותחים דף חדש'),
-      h('p', { class: 'center soft' }, '— או —'),
-      h('div', { class: 'card stack' }, h('label', {}, 'יש לי קוד מהטלפון השני:'), codeIn,
-        h('button', { class: 'btn', onclick: () => join('typed_code') }, 'הצטרפות')));
+      h('button', { class: 'btn big marker mt', onclick: () => { const n = getName(); if (n) startHost(n); } }, T('📄 פותחים דף חדש', '📄 Start a new page')),
+      h('p', { class: 'center soft' }, T('— או —', '— or —')),
+      h('div', { class: 'card stack' }, h('label', {}, T('יש לי קוד מהטלפון השני:', 'I have a code from the other phone:')), codeIn,
+        h('button', { class: 'btn', onclick: () => join('typed_code') }, T('הצטרפות', 'Join'))));
   }
   kids.push(
     room ? null : h('div', { class: 'card' },
-      h('b', {}, 'איך זה עובד?'),
+      h('b', {}, T('איך זה עובד?', 'How does it work?')),
       h('ol', { class: 'help' },
-        h('li', {}, 'אחד פותח דף חדש ומקבל קוד של 4 ספרות.'),
-        h('li', {}, 'השני מצטרף עם הקישור או עם הקוד.'),
-        h('li', {}, 'משחקים סדרה של חמישה משחקים – הטוב מחמישה מנצח.'))),
-    h('p', { class: 'center soft', style: { fontSize: '12px' } }, `גרסה ${VERSION} · האתר שולח נתוני שימוש ונתוני חיבור אנונימיים כדי לשפר את המשחקים ולאתר תקלות (בלי שמות ובלי תוכן המשחק).`));
+        h('li', {}, T('אחד פותח דף חדש ומקבל קוד של 4 ספרות.', 'One of you starts a new page and gets a 4-digit code.')),
+        h('li', {}, T('השני מצטרף עם הקישור או עם הקוד.', 'The other joins with the link or the code.')),
+        h('li', {}, T('משחקים סדרה של חמישה משחקים – הטוב מחמישה מנצח.', 'Play a series of five games – best of five wins.')))),
+    h('p', { class: 'center soft', style: { fontSize: '12px' } }, T(`גרסה ${VERSION} · האתר שולח נתוני שימוש ונתוני חיבור אנונימיים כדי לשפר את המשחקים ולאתר תקלות (בלי שמות ובלי תוכן המשחק).`, `Version ${VERSION} · The site sends anonymous usage and connection data to improve the games and find problems (no names, no game content).`)));
   viewIs(room ? 'join' : 'home');
   app.replaceChildren(...kids.filter(Boolean));
 }
@@ -895,6 +901,7 @@ async function boot() {
   session = store.get('session', null);
   const room = (params.get('room') || '').replace(/\D/g, '').slice(0, 4);
   const resumes = !!(session && (!room || room === session.code));
+  setContext({ ui_lang: LANG, device_lang: (navigator.language || '').slice(0, 10) });
   if (resumes) setContext({ role: session.role });
   trackPageview(resumes ? 'resume' : room ? 'invite_link' : 'direct');
   if (session && (!room || room === session.code)) {

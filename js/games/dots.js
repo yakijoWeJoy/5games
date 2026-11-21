@@ -1,4 +1,5 @@
 import { h, s, INK, roughD } from '../ui.js';
+import { T } from '../i18n.js';
 
 const D = 6;            // dots per side
 const B = D - 1;        // boxes per side
@@ -9,13 +10,13 @@ const boxDone = (g, r, c) => g.h[r][c] >= 0 && g.h[r + 1][c] >= 0 && g.v[r][c] >
 
 export default {
   id: 'dots',
-  title: 'נקודות',
-  sub: '6×6 נקודות · מי שסוגר ריבוע מקבל אותו ועוד תור',
+  title: T('נקודות', 'Dots & Boxes'),
+  sub: T('6×6 נקודות · מי שסוגר ריבוע מקבל אותו ועוד תור', '6×6 dots · close a box to win it and go again'),
   help: [
-    'מותחים בתורות קו בין שתי נקודות שכנות (לוחצים ביניהן).',
-    'מי שסוגר ריבוע מקבל אותו – והאות הראשונה של השם שלו נכתבת בפנים – ועוד <b>תור</b>.',
-    'בסוף מנצח מי שיש לו יותר ריבועים.',
-    'טיפ: לא כדאי למתוח את הקו השלישי של ריבוע 😉',
+    T('מותחים בתורות קו בין שתי נקודות שכנות (לוחצים ביניהן).', 'Take turns drawing a line between two neighbouring dots (tap between them).'),
+    T('מי שסוגר ריבוע מקבל אותו – והאות הראשונה של השם שלו נכתבת בפנים – ועוד <b>תור</b>.', 'Close a box and it\'s yours – your initial is written inside – and you get <b>another turn</b>.'),
+    T('בסוף מנצח מי שיש לו יותר ריבועים.', 'Whoever has more boxes at the end wins.'),
+    T('טיפ: לא כדאי למתוח את הקו השלישי של ריבוע 😉', 'Tip: don\'t draw the third line of a box 😉'),
   ],
 
   init(starter) {
@@ -53,16 +54,16 @@ export default {
 
   status(g, { me, other, names }) {
     if (g.turn === me) {
-      const extra = g.last && g.last.p === me && g.lastGot ? 'סגרת ריבוע! עוד תור ✨' : 'תורך – מותחים קו';
+      const extra = g.last && g.last.p === me && g.lastGot ? T('סגרת ריבוע! עוד תור ✨', 'You closed a box! Another turn ✨') : T('תורך – מותחים קו', 'Your turn – draw a line');
       return { mine: true, text: extra };
     }
-    return { mine: false, text: g.last && g.last.p === other && g.lastGot ? `${names[other]} סגר/ה ריבוע וממשיך/ה…` : `התור של ${names[other]}…` };
+    return { mine: false, text: g.last && g.last.p === other && g.lastGot ? T(`${names[other]} סגר/ה ריבוע וממשיך/ה…`, `${names[other]} closed a box and goes again…`) : T(`התור של ${names[other]}…`, `${names[other]}\'s turn…`) };
   },
 
   overDetail(g, { names }) {
     const flat = g.box.flat();
     const n0 = flat.filter(x => x === 0).length;
-    return `${names[0]}: ${n0} ריבועים · ${names[1]}: ${flat.length - n0} ריבועים`;
+    return T(`${names[0]}: ${n0} ריבועים · ${names[1]}: ${flat.length - n0} ריבועים`, `${names[0]}: ${n0} boxes · ${names[1]}: ${flat.length - n0} boxes`);
   },
 
   render(root, g, ctx) {
@@ -119,6 +120,6 @@ export default {
     for (let r = 0; r < D; r++) for (let c = 0; c < D; c++) svg.append(s('circle', { cx: px(c), cy: px(r), r: 4, fill: '#3b3a36' }));
     svg.append(hits);
     root.append(svg);
-    if (!g.over) root.append(h('p', { class: 'center soft', style: { fontSize: '14px' } }, myTurn ? 'לוחצים בין שתי נקודות כדי למתוח קו' : `מחכים ל${names[ctx.other]}…`));
+    if (!g.over) root.append(h('p', { class: 'center soft', style: { fontSize: '14px' } }, myTurn ? T('לוחצים בין שתי נקודות כדי למתוח קו', 'Tap between two dots to draw a line') : T(`מחכים ל${names[ctx.other]}…`, `Waiting for ${names[ctx.other]}…`)));
   },
 };

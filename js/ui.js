@@ -1,3 +1,4 @@
+import { T } from './i18n.js';
 export const SVGNS = 'http://www.w3.org/2000/svg';
 export const INK = ['#2350b8', '#c5332b'];
 export const PENCIL = '#3b3a36';
@@ -40,7 +41,7 @@ export function toast(text, title, ms = 2800) {
   setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, ms);
 }
 
-export function confirmBox(text, yes = 'כן', no = 'ביטול') {
+export function confirmBox(text, yes = T('כן', 'Yes'), no = T('ביטול', 'Cancel')) {
   return new Promise(res => {
     const bg = h('div', { class: 'modal-bg' });
     const done = v => { bg.remove(); res(v); };

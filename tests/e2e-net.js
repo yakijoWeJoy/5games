@@ -66,7 +66,7 @@ async function turnOf(A, B, want) {
 // the series is played in order, so the tests use a test-only shortcut straight to the dots game (host only)
 const startDots = host => host.evaluate(() => window.__dv.act({ k: 'jump', game: 'dots' }));
 async function newCtx() {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ctx = await browser.newContext({ locale: 'he-IL', viewport: { width: 390, height: 844 } });
   if (!CFG) await ctx.addInitScript(() => { window.__dvLogTopic = 'dv5g-selftest-ci'; }); // keep test runs out of the real log
   await ctx.addInitScript(() => { window.__dvTest = true; window.__dvNoHelp = true; });
   if (CFG) await ctx.addInitScript(cfg => { window.__dvBrokers = cfg.brokers; if (cfg.noDirect) window.__dvNoDirect = true; }, CFG);

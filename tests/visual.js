@@ -26,6 +26,7 @@ const DEVICES = [
   { name: 'desktop-1920', w: 1920, h: 1080, dpr: 1, mobile: false },
   { name: 'ultrawide-3440 (as seen in the logs)', w: 3440, h: 1440, dpr: 1, mobile: false },
 ];
+const UI = process.env.UI_LANG === 'en' ? 'en' : 'he'; // UI_LANG=en checks the English screens
 const SCENES = ['home', 'join', 'invite', 'menu', 'menu-mid', 'bull-secret', 'bull-play', 'bull-over', 'hangman-word', 'hangman-play',
   'ships-place', 'ships-play', 'dots', 'five', 'five-many', 'five-over', 'bull-play+help', 'hangman-play+help', 'ships-play+help', 'dots+help', 'five+help', 'decided', 'decided-menu', 'done-menu', 'lost'];
 
@@ -112,7 +113,7 @@ const ONLY = process.env.SCENES ? process.env.SCENES.split(',') : null; // e.g. 
   const browser = await chromium.launch();
   let bad = 0, total = 0;
   for (const d of DEVICES) {
-    const ctx = await browser.newContext({ viewport: { width: d.w, height: d.h }, deviceScaleFactor: 1, isMobile: d.mobile, hasTouch: d.mobile });
+    const ctx = await browser.newContext({ locale: UI === 'en' ? 'en-US' : 'he-IL', viewport: { width: d.w, height: d.h }, deviceScaleFactor: 1, isMobile: d.mobile, hasTouch: d.mobile });
     const page = await ctx.newPage();
     const errs = [];
     page.on('pageerror', e => errs.push(e.message));
@@ -122,7 +123,7 @@ const ONLY = process.env.SCENES ? process.env.SCENES.split(',') : null; // e.g. 
       for (const me of sc === 'home' || sc === 'join' || sc === 'invite' ? [0] : [0, 1]) {
         total++;
         const [scene, extra] = sc.split('+');
-        await page.goto(`${BASE}?demo=${scene}&me=${me}${extra ? '&' + extra + '=1' : ''}`);
+        await page.goto(`${BASE}?demo=${scene}&me=${me}&lang=${UI}${extra ? '&' + extra + '=1' : ''}`);
         await page.waitForTimeout(350);
         const issues = await page.evaluate(CHECK);
         if (errs.length) issues.push('script error: ' + errs.splice(0).join(' | '));

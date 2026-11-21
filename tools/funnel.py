@@ -42,6 +42,7 @@ SELECT distinct_id,
   argMin(coalesce(properties.campaign_source, properties.invited_from_source, properties.utm_source, ''), timestamp) AS src,
   argMin(properties.$os, timestamp) AS os,
   argMin(properties.$browser, timestamp) AS browser,
+  argMin(coalesce(toString(properties.ui_lang), '?'), timestamp) AS ui_lang,
   countIf(event = 'room_created') > 0 AS hosted,
   countIf(event = 'join_submitted') > 0 AS joined,
   countIf(event = 'partner_joined' OR (event = 'connected' AND properties.role = 'guest')) > 0 AS paired,
@@ -63,7 +64,7 @@ HAVING countIf(event = '$pageview' AND toString(properties.is_new_user) = 'true'
 """
 where = f"WHERE lower(src) = '{SRC}'" if SRC.replace('_', '').replace('-', '').isalnum() else ''
 rows = q(f"SELECT * FROM ({PLAYERS}) {where}")
-cols = ['id', 'entry', 'src', 'os', 'browser', 'hosted', 'joined', 'paired', 'started', 'completed', 'name_missing', 'bad_code',
+cols = ['id', 'entry', 'src', 'os', 'browser', 'ui_lang', 'hosted', 'joined', 'paired', 'started', 'completed', 'name_missing', 'bad_code',
         'trouble', 'problems', 'last_screen', 'visit_s', 'ab_game', 'ab_phase']
 P = [dict(zip(cols, r)) for r in rows]
 pct = lambda a, b: f'{100 * a / b:5.1f}%' if b else '   - '
@@ -123,6 +124,10 @@ print('\n=== finished a first game, by browser (spot a browser where people get 
 for b, n in count(P, 'browser'):
     done = sum(1 for p in P if (p['browser'] or '(none)') == b and p['completed'])
     print(f'   {b:<30} {n:>5} players  {pct(done, n)} finished a game')
+print('\n=== by language (Hebrew vs English screens)')
+for lg, n in count(P, 'ui_lang'):
+    done = sum(1 for p in P if (p['ui_lang'] or '(none)') == lg and p['completed'])
+    print(f'   {lg:<30} {n:>5} players  {pct(done, n)} finished a game')
 if not SRC:
     print('\n=== by source')
     for s, n in count(P, 'src'):

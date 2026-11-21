@@ -28,7 +28,7 @@ const lineBy = async p => { const polys = await p.$$('.dots-svg polygon'); await
 
 (async () => {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  const ctx = await browser.newContext({ locale: 'he-IL', viewport: { width: 390, height: 844 }, hasTouch: true });
   await ctx.addInitScript(() => { window.__dvTest = true; });
   const A = await ctx.newPage(), B = await ctx.newPage();
   const errs = [];

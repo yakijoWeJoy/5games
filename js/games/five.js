@@ -1,5 +1,6 @@
 import { h, s, markX, markO, roughLine, INK } from '../ui.js';
 import { log } from '../log.js';
+import { T } from '../i18n.js';
 
 const N = 21;      // a big sheet of squared paper
 const U = 30;      // drawing units per square
@@ -14,13 +15,13 @@ let dom = null;
 
 export default {
   id: 'five',
-  title: '5 בשורה',
-  sub: 'דף משבצות ענק · הראשון שמשלים 5 ברצף',
+  title: T('5 בשורה', 'Five in a Row'),
+  sub: T('דף משבצות ענק · הראשון שמשלים 5 ברצף', 'A huge squared sheet · first to get 5 in a row'),
   help: [
-    'מסמנים בתורות: אחד ✕ והשני ◯.',
-    'הראשון שמשלים <b>5 ברצף</b> – בשורה, בטור או באלכסון – מנצח.',
-    'לחיצה אחת בוחרת משבצת, לחיצה שנייה מסמנת (כדי שלא יהיו טעויות).',
-    'הדף גדול: גוללים עם האצבע, ו-+ / − מגדילים ומקטינים.',
+    T('מסמנים בתורות: אחד ✕ והשני ◯.', 'Take turns marking: one plays ✕, the other ◯.'),
+    T('הראשון שמשלים <b>5 ברצף</b> – בשורה, בטור או באלכסון – מנצח.', 'First to get <b>5 in a row</b> – across, down or diagonally – wins.'),
+    T('לחיצה אחת בוחרת משבצת, לחיצה שנייה מסמנת (כדי שלא יהיו טעויות).', 'One tap picks a square, a second tap marks it (so there are no mistakes).'),
+    T('הדף גדול: גוללים עם האצבע, ו-+ / − מגדילים ומקטינים.', 'The sheet is big: scroll with your finger, and use + / − to zoom.'),
   ],
 
   init(starter) {
@@ -56,12 +57,12 @@ export default {
   status(g, { me, other, names }) {
     const sym = g.turn === 0 ? '✕' : '◯';
     return g.turn === me
-      ? { mine: true, text: `תורך לסמן ${sym}` }
-      : { mine: false, text: `התור של ${names[other]}…` };
+      ? { mine: true, text: T(`תורך לסמן ${sym}`, `Your turn to mark ${sym}`) }
+      : { mine: false, text: T(`התור של ${names[other]}…`, `${names[other]}\'s turn…`) };
   },
 
   overDetail(g, { me }) {
-    return g.over.winner == null ? 'הדף התמלא!' : g.over.winner === me ? 'חמש בשורה! ✋' : 'חמש בשורה… בפעם הבאה 💪';
+    return g.over.winner == null ? T('הדף התמלא!', 'The sheet is full!') : g.over.winner === me ? T('חמש בשורה! ✋', 'Five in a row! ✋') : T('חמש בשורה… בפעם הבאה 💪', 'Five in a row… next time 💪');
   },
 
   render(root, g, ctx) {
@@ -162,7 +163,7 @@ function paint() {
   // the row always keeps its place, so nothing on the page moves when the turn changes
   d.confirmRow.style.display = g.over ? 'none' : '';
   d.confirm.disabled = !myTurn || ui.sel == null;
-  d.confirm.textContent = !myTurn ? `מחכים ל${ctx.names[ctx.other]}…` : ui.sel == null ? 'לוחצים על משבצת' : 'לסמן כאן ✓ (או לחיצה נוספת)';
+  d.confirm.textContent = !myTurn ? T(`מחכים ל${ctx.names[ctx.other]}…`, `Waiting for ${ctx.names[ctx.other]}…`) : ui.sel == null ? T('לוחצים על משבצת', 'Tap a square') : T('לסמן כאן ✓ (או לחיצה נוספת)', 'Mark here ✓ (or tap again)');
 
   // first paint: open the sheet on the action; later: slide to a new mark that is out of sight
   const first = ui.seenLast === undefined;

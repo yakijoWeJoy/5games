@@ -5,13 +5,14 @@ import hangman from './games/hangman.js';
 import ships from './games/ships.js';
 import dots from './games/dots.js';
 import five from './games/five.js';
+import { T } from './i18n.js';
 
 export const GAMES = [bull, hangman, ships, dots, five];
 export const BY = Object.fromEntries(GAMES.map(G => [G.id, G]));
 export const STATE_V = 2;
 export const NEED = 3; // wins that decide a best-of-five series
 
-export const cleanName = n => String(n || '').trim().slice(0, 14) || 'שחקן';
+export const cleanName = n => String(n || '').trim().slice(0, 14) || T('שחקן', 'Player');
 
 export function newState(name, token) {
   return {

@@ -3,7 +3,7 @@
 #   tests/with-servers.sh tests/webkit-all.sh OUTDIR
 OUT="${1:-visual-out/webkit}"; mkdir -p "$OUT"
 B="http://localhost:8765/"
-shot() { xvfb-run -a /usr/bin/python3.12 tests/webkit-shot.py "$OUT/$1.png" "$B?demo=$2&me=$3" 390 844 "${@:4}" 2>&1 | grep -E "^JS|ERROR"; }
+shot() { xvfb-run -a /usr/bin/python3.12 tests/webkit-shot.py "$OUT/$1.png" "$B?demo=$2&me=$3&lang=he" 390 844 "${@:4}" 2>&1 | grep -E "^JS|ERROR"; }
 for sc in home invite menu-mid bull-play hangman-play ships-place ships-play dots five decided done-menu lost; do shot "$sc" "$sc" 0; done
 # taps: five in a row (select a cell -> a dashed box must appear exactly on that cell)
 shot tap-five five 1 --js "(function(){const b=document.querySelector('.five-board');const r=b.getBoundingClientRect();const cell=r.width/21;const R=12,C=9;const x=r.left+(C+.5)*cell,y=r.top+(R+.5)*cell;b.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:x,clientY:y}));const s=document.querySelector('.five-sel');if(!s)return 'NO SELECTION DRAWN';const q=s.getBoundingClientRect();const dx=Math.abs((q.left+q.width/2)-x),dy=Math.abs((q.top+q.height/2)-y);return 'five: selection drawn, offset from tap '+dx.toFixed(1)+','+dy.toFixed(1)+'px, size '+q.width.toFixed(0)+'x'+q.height.toFixed(0)+', marks '+b.querySelectorAll('svg path').length})()"

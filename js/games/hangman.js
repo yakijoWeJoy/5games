@@ -1,4 +1,5 @@
 import { h, s, roughLine, roughCircle } from '../ui.js';
+import { T, LANG } from '../i18n.js';
 
 const MAX = 10;
 const HE = 'אבגדהוזחטיכלמנסעפצקרשת'.split('');
@@ -25,9 +26,9 @@ function validWord(w) {
 const needed = text => new Set([...text].filter(c => c !== ' ').map(norm));
 const isSolved = (text, guessed) => [...needed(text)].every(l => guessed.includes(l));
 
-let ui = { id: null, lang: 'he', entry: '', hint: '', solve: false, solveEntry: '' };
+let ui = { id: null, lang: LANG, entry: '', hint: '', solve: false, solveEntry: '' };
 function sync(g) {
-  if (ui.id !== g.id) ui = { id: g.id, lang: ui.lang || 'he', entry: '', hint: '', solve: false, solveEntry: '' };
+  if (ui.id !== g.id) ui = { id: g.id, lang: ui.lang || LANG, entry: '', hint: '', solve: false, solveEntry: '' };
 }
 
 /** The gallows, drawn stroke by stroke. */
@@ -71,13 +72,13 @@ function keyboard(letters, onKey, { cols = 7, disabled = false, state = () => ''
 
 export default {
   id: 'hangman',
-  title: 'איש תלוי',
-  sub: 'כל אחד בוחר מילה, ושואלים אות אחרי אות',
+  title: T('איש תלוי', 'Hangman'),
+  sub: T('כל אחד בוחר מילה, ושואלים אות אחרי אות', 'Each picks a word, then you ask letter by letter'),
   help: [
-    'כל אחד בוחר מילה סודית (בעברית או באנגלית), ואפשר להוסיף רמז.',
-    'מנחשים בתורות אותיות במילה של השני.',
-    'אות נכונה = <b>עוד תור</b>. אות לא נכונה = עוד קו בציור.',
-    'מי שמגלה ראשון את המילה מנצח. 10 טעויות = נתלית 😵',
+    T('כל אחד בוחר מילה סודית (בעברית או באנגלית), ואפשר להוסיף רמז.', 'Each of you picks a secret word (in English or Hebrew), and can add a hint.'),
+    T('מנחשים בתורות אותיות במילה של השני.', 'Take turns guessing letters in the other one\'s word.'),
+    T('אות נכונה = <b>עוד תור</b>. אות לא נכונה = עוד קו בציור.', 'Right letter = <b>another turn</b>. Wrong letter = one more line in the drawing.'),
+    T('מי שמגלה ראשון את המילה מנצח. 10 טעויות = נתלית 😵', 'First to find the word wins. 10 mistakes = hanged 😵'),
   ],
 
   init(starter) {
@@ -129,23 +130,23 @@ export default {
   status(g, { me, other, names }) {
     if (g.phase === 'word') {
       return g.words[me]
-        ? { mine: false, text: `מחכים ש${names[other]} יבחר/תבחר מילה…` }
-        : { mine: true, text: 'בחרו מילה סודית ✏️' };
+        ? { mine: false, text: T(`מחכים ש${names[other]} יבחר/תבחר מילה…`, `Waiting for ${names[other]} to pick a word…`) }
+        : { mine: true, text: T('בחרו מילה סודית ✏️', 'Pick a secret word ✏️') };
     }
     const L = g.last;
     if (g.turn === me) {
-      if (L && L.p === me && L.hit) return { mine: true, text: `יש "${L.l}"! עוד תור ✨` };
+      if (L && L.p === me && L.hit) return { mine: true, text: T(`יש "${L.l}"! עוד תור ✨`, `"${L.l}" is in! Another turn ✨`) };
       let t = '';
-      if (L && L.p === other) t = L.word ? `${names[other]} ניסה/תה "${L.word}" – לא! · ` : `${names[other]} שאל/ה "${L.l}" – אין · `;
-      return { mine: true, text: t + 'תורך לבחור אות' };
+      if (L && L.p === other) t = L.word ? T(`${names[other]} ניסה/תה "${L.word}" – לא! · `, `${names[other]} tried "${L.word}" – no! · `) : T(`${names[other]} שאל/ה "${L.l}" – אין · `, `${names[other]} asked "${L.l}" – not there · `);
+      return { mine: true, text: t + T('תורך לבחור אות', 'Your turn to pick a letter') };
     }
-    if (L && L.p === other && L.hit) return { mine: false, text: `${names[other]} מצא/ה "${L.l}" וממשיך/ה…` };
-    return { mine: false, text: `התור של ${names[other]}…` };
+    if (L && L.p === other && L.hit) return { mine: false, text: T(`${names[other]} מצא/ה "${L.l}" וממשיך/ה…`, `${names[other]} found "${L.l}" and goes again…`) };
+    return { mine: false, text: T(`התור של ${names[other]}…`, `${names[other]}\'s turn…`) };
   },
 
   overDetail(g, { me, other, names }) {
-    const hang = g.over.hanged != null ? (g.over.hanged === me ? 'נתלית… 😵 ' : `${names[other]} נתלה/תה! `) : '';
-    return `${hang}המילה של ${names[other]}: "${g.words[other].text}" · המילה שלי: "${g.words[me].text}"`;
+    const hang = g.over.hanged != null ? (g.over.hanged === me ? T('נתלית… 😵 ', 'You were hanged… 😵 ') : T(`${names[other]} נתלה/תה! `, `${names[other]} was hanged! `)) : '';
+    return T(`${hang}המילה של ${names[other]}: "${g.words[other].text}" · המילה שלי: "${g.words[me].text}"`, `${hang}${names[other]}\'s word: "${g.words[other].text}" · my word: "${g.words[me].text}"`);
   },
 
   render(root, g, ctx) {
@@ -158,23 +159,23 @@ export default {
     if (g.phase === 'word') {
       if (g.words[me]) {
         root.append(h('div', { class: 'card center' },
-          h('div', {}, 'המילה שלי'),
+          h('div', {}, T('המילה שלי', 'My word')),
           wordView(g.words[me].text, g.words[me].lang, [], { ghost: true }),
-          g.words[me].hint ? h('div', { class: 'hint' }, 'רמז: ', g.words[me].hint) : null,
-          h('p', { class: 'soft' }, 'ששש… 🤐')));
+          g.words[me].hint ? h('div', { class: 'hint' }, T('רמז: ', 'Hint: '), g.words[me].hint) : null,
+          h('p', { class: 'soft' }, T('ששש… 🤐', 'Shhh… 🤐'))));
         return;
       }
       const lang = ui.lang;
-      const hintIn = h('input', { class: 'paper', placeholder: 'רמז (לא חובה) – למשל: חיה, עיר, שיר…', maxlength: 40, value: ui.hint, 'data-fk': 'hint' });
+      const hintIn = h('input', { class: 'paper', placeholder: T('רמז (לא חובה) – למשל: חיה, עיר, שיר…', 'Hint (optional) – e.g. animal, city, song…'), maxlength: 40, value: ui.hint, 'data-fk': 'hint' });
       hintIn.addEventListener('input', () => { ui.hint = hintIn.value; });
       const display = ui.entry
         ? h('div', { class: 'word', style: { direction: lang === 'en' ? 'ltr' : 'rtl', color: myInk } },
           [...ui.entry].map(ch => h('div', { class: 'ch' + (ch === ' ' ? ' sp' : '') }, ch === ' ' ? '' : ch)))
-        : h('p', { class: 'center soft', style: { margin: 0 } }, 'הקלידו את המילה במקלדת למטה');
+        : h('p', { class: 'center soft', style: { margin: 0 } }, T('הקלידו את המילה במקלדת למטה', 'Type the word on the keyboard below'));
       const displayBox = h('div', { class: 'word-entry' }, display);
       const kb = keyboard(entryLetters(lang), l => { if (ui.entry.length < 24) { ui.entry += l; rerender(); } }, { cols: lang === 'en' ? 7 : 7 });
       kb.append(
-        h('button', { class: 'key wide', onclick: () => { if (ui.entry && !ui.entry.endsWith(' ')) { ui.entry += ' '; rerender(); } } }, 'רווח'),
+        h('button', { class: 'key wide', onclick: () => { if (ui.entry && !ui.entry.endsWith(' ')) { ui.entry += ' '; rerender(); } } }, T('רווח', 'Space')),
         h('button', { class: 'key wide', disabled: !ui.entry, onclick: () => { ui.entry = ui.entry.slice(0, -1); rerender(); } }, '⌫'));
       root.append(
         h('div', { class: 'row center' },
@@ -186,7 +187,7 @@ export default {
           class: 'btn big marker',
           disabled: !validWord({ text: ui.entry, lang }),
           onclick: () => send({ k: 'word', text: ui.entry, lang, hint: ui.hint }),
-        }, 'זאת המילה! 🔒'));
+        }, T('זאת המילה! 🔒', 'That\'s my word! 🔒')));
       return;
     }
 
@@ -196,45 +197,45 @@ export default {
     const myTurn = g.turn === me && !g.over;
     const tNeeded = needed(target.text);
 
-    root.append(h('h3', { class: 'center', style: { color: theirInk } }, `המילה של ${names[other]}`));
-    if (target.hint) root.append(h('div', { class: 'hint' }, 'רמז: ', h('b', {}, target.hint)));
+    root.append(h('h3', { class: 'center', style: { color: theirInk } }, T(`המילה של ${names[other]}`, `${names[other]}\'s word`)));
+    if (target.hint) root.append(h('div', { class: 'hint' }, T('רמז: ', 'Hint: '), h('b', {}, target.hint)));
     root.append(wordView(target.text, target.lang, g.guessed[me], { color: myInk, ghost: !!g.over }));
     root.append(h('div', { class: 'row center', style: { flexWrap: 'nowrap', alignItems: 'flex-end' } },
       gallows(g.wrong[me], myInk, 130),
-      h('div', { class: 'soft' }, `טעויות: ${g.wrong[me]}/${MAX}`)));
+      h('div', { class: 'soft' }, T(`טעויות: ${g.wrong[me]}/${MAX}`, `Mistakes: ${g.wrong[me]}/${MAX}`))));
 
     if (!g.over) {
       if (ui.solve) {
         const kb = keyboard(entryLetters(target.lang), l => { if (ui.solveEntry.length < 24) { ui.solveEntry += l; rerender(); } }, { disabled: !myTurn });
         kb.append(
-          h('button', { class: 'key wide', onclick: () => { ui.solveEntry += ' '; rerender(); } }, 'רווח'),
+          h('button', { class: 'key wide', onclick: () => { ui.solveEntry += ' '; rerender(); } }, T('רווח', 'Space')),
           h('button', { class: 'key wide', onclick: () => { ui.solveEntry = ui.solveEntry.slice(0, -1); rerender(); } }, '⌫'));
         root.append(
           h('div', { class: 'card' },
-            h('div', { class: 'center' }, 'כל המילה (ניחוש שגוי = טעות אחת):'),
+            h('div', { class: 'center' }, T('כל המילה (ניחוש שגוי = טעות אחת):', 'The whole word (a wrong guess = one mistake):')),
             h('div', { class: 'word', style: { color: myInk, direction: target.lang === 'en' ? 'ltr' : 'rtl' } },
               ui.solveEntry ? [...ui.solveEntry].map(ch => h('div', { class: 'ch' + (ch === ' ' ? ' sp' : '') }, ch === ' ' ? '' : ch)) : h('div', { class: 'soft' }, '…')),
             kb,
             h('div', { class: 'row center' },
-              h('button', { class: 'btn marker', disabled: !myTurn || !ui.solveEntry.trim(), onclick: () => { send({ k: 'solve', text: ui.solveEntry }); ui.solve = false; ui.solveEntry = ''; } }, 'זאת המילה!'),
-              h('button', { class: 'btn ghost', onclick: () => { ui.solve = false; ui.solveEntry = ''; rerender(); } }, 'חזרה לאותיות'))));
+              h('button', { class: 'btn marker', disabled: !myTurn || !ui.solveEntry.trim(), onclick: () => { send({ k: 'solve', text: ui.solveEntry }); ui.solve = false; ui.solveEntry = ''; } }, T('זאת המילה!', 'That\'s the word!')),
+              h('button', { class: 'btn ghost', onclick: () => { ui.solve = false; ui.solveEntry = ''; rerender(); } }, T('חזרה לאותיות', 'Back to letters')))));
       } else {
         root.append(keyboard(lettersOf(target.lang), l => send({ k: 'letter', l }), {
           disabled: !myTurn,
           state: l => (g.guessed[me].includes(l) ? (tNeeded.has(l) ? 'used-good' : 'used-bad') : ''),
         }));
         root.append(h('div', { class: 'center' },
-          h('button', { class: 'link-btn', disabled: !myTurn, onclick: () => { ui.solve = true; rerender(); } }, 'יודע/ת את כל המילה? 💡')));
+          h('button', { class: 'link-btn', disabled: !myTurn, onclick: () => { ui.solve = true; rerender(); } }, T('יודע/ת את כל המילה? 💡', 'Know the whole word? 💡'))));
       }
     }
 
     root.append(h('hr', { class: 'pencil-line' }));
     root.append(h('div', { class: 'center' },
-      h('b', { style: { color: myInk } }, 'המילה שלי'), h('span', { class: 'soft' }, ` – ${names[other]} מנחש/ת`)));
+      h('b', { style: { color: myInk } }, T('המילה שלי', 'My word')), h('span', { class: 'soft' }, T(` – ${names[other]} מנחש/ת`, ` – ${names[other]} is guessing`))));
     root.append(h('div', { class: 'row center', style: { flexWrap: 'nowrap', alignItems: 'flex-end' } },
       h('div', {}, wordView(mine.text, mine.lang, g.guessed[other], { ghost: true, small: true, color: theirInk }),
         h('div', { class: 'soft center', style: { fontSize: '14px' } },
-          'אותיות ששאל/ה: ', g.guessed[other].join(' ') || '—')),
+          T('אותיות ששאל/ה: ', 'Letters asked: '), g.guessed[other].join(' ') || '—')),
       gallows(g.wrong[other], theirInk, 80)));
   },
 };

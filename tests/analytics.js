@@ -10,7 +10,7 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
 
 (async () => {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  const ctx = await browser.newContext({ locale: 'he-IL', viewport: { width: 390, height: 844 }, hasTouch: true });
   await ctx.addInitScript(() => { window.__dvTest = true; window.__dvAnalytics = { key: 'phc_test', host: 'https://ph.test' }; });
   const events = [];
   let bad = 0;
@@ -112,7 +112,7 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
   check(events.length > before && events.slice(before).some(e => e.event === 'sound_toggled'), 'events made while offline are sent after the next load');
 
   // a TikTok ad click inside TikTok's own browser
-  const ctx3 = await browser.newContext({ userAgent: 'Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36 musical_ly_2023405030 BytedanceWebview/d8a21c6' });
+  const ctx3 = await browser.newContext({ locale: 'he-IL', userAgent: 'Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36 musical_ly_2023405030 BytedanceWebview/d8a21c6' });
   await ctx3.addInitScript(() => { window.__dvAnalytics = { key: 'phc_test', host: 'https://ph.test' }; });
   const tt = [];
   await ctx3.route('https://ph.test/**', async r => { try { tt.push(...JSON.parse(r.request().postData()).batch); } catch { /* */ } await r.fulfill({ status: 200, body: '{}' }); });
@@ -126,7 +126,7 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
 
   // an Instagram ad click inside Instagram's own browser
   {
-    const c5 = await browser.newContext({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.40.92 (iPhone14,5; iOS 17_5; he_IL; he; scale=3.00; 1170x2532; 600000000)' });
+    const c5 = await browser.newContext({ locale: 'he-IL', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 330.0.0.40.92 (iPhone14,5; iOS 17_5; he_IL; he; scale=3.00; 1170x2532; 600000000)' });
     await c5.addInitScript(() => { window.__dvAnalytics = { key: 'phc_test', host: 'https://ph.test' }; });
     const ig = [];
     await c5.route('https://ph.test/**', async r => { try { ig.push(...JSON.parse(r.request().postData()).batch); } catch { /* */ } await r.fulfill({ status: 200, body: '{}' }); });
@@ -141,7 +141,7 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
 
   // a guest phone with a copy of the game saved by an old version (before the series existed) must not crash
   {
-    const c4 = await browser.newContext();
+    const c4 = await browser.newContext({ locale: 'he-IL' });
     await c4.addInitScript(() => { window.__dvAnalytics = { key: 'phc_test', host: 'https://ph.test' }; });
     const got = [];
     await c4.route('https://ph.test/**', async r => { try { got.push(...JSON.parse(r.request().postData()).batch); } catch { /* */ } await r.fulfill({ status: 200, body: '{}' }); });
@@ -161,7 +161,7 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
   }
 
   // demo / local runs without the test switch send nothing
-  const ctx2 = await browser.newContext();
+  const ctx2 = await browser.newContext({ locale: 'he-IL' });
   let leaked = 0;
   await ctx2.route('**/*posthog*/**', r => { leaked++; r.abort(); });
   const C = await ctx2.newPage();

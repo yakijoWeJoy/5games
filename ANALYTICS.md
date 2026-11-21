@@ -37,7 +37,7 @@ The following properties are on **every event**:
 - `$session_id`: a new session starts after 30 minutes idle
 - `$os`, `$browser`, `$device_type`
 - `standalone`: added to the home screen
-- `lang`, `net_type`
+- `lang` (device language), `ui_lang` (the language the game is shown in: `he` or `en`), `net_type`
 - screen size
 
 > **Game events are reported by both phones.** To count games or series, filter `role = host` (or count unique `game_uid`). Use both phones for per-player questions, for example "do players who lose come back?", which uses `my_outcome`.
@@ -76,6 +76,7 @@ The following properties are on **every event**:
 | `tutorial_closed` | `game`, `trigger`, `seconds_open` |
 | `note_sent` | `kind` (`quick` + which ready-made note, or `typed` + `length` bucket) |
 | `sound_toggled` | `on` |
+| `language_switched` | `from`, `to`, `screen` (the עברית / English switch on the home screen) |
 | `partner_replaced` | `series_n` |
 | `room_left` | `in_game`, `series_n`, `games_in_series`, `partner_joined`, `minutes_in_room` |
 | `$pageleave` | `duration_s`, `last_screen` |

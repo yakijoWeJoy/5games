@@ -1,12 +1,13 @@
 import { h, s, toast, markX, markDot, INK } from '../ui.js';
+import { T, HE } from '../i18n.js';
 
 export const N = 6;
-const COLS = 'אבגדהו';
+const COLS = T('אבגדהו', 'ABCDEF');
 export const SHIPS = [
-  { id: 'nun', name: 'ן', size: 5, cells: [[0, 0], [0, 1], [1, 0], [2, 0], [3, 0]] },
-  { id: 's4', name: 'צוללת 4', size: 4, cells: [[0, 0], [0, 1], [0, 2], [0, 3]] },
-  { id: 's3', name: 'צוללת 3', size: 3, cells: [[0, 0], [0, 1], [0, 2]] },
-  { id: 's2', name: 'צוללת 2', size: 2, cells: [[0, 0], [0, 1]] },
+  { id: 'nun', name: T('ן', 'L'), size: 5, cells: [[0, 0], [0, 1], [1, 0], [2, 0], [3, 0]] },
+  { id: 's4', name: T('צוללת 4', 'Sub 4'), size: 4, cells: [[0, 0], [0, 1], [0, 2], [0, 3]] },
+  { id: 's3', name: T('צוללת 3', 'Sub 3'), size: 3, cells: [[0, 0], [0, 1], [0, 2]] },
+  { id: 's2', name: T('צוללת 2', 'Sub 2'), size: 2, cells: [[0, 0], [0, 1]] },
 ];
 const DEF = Object.fromEntries(SHIPS.map(d => [d.id, d]));
 const coord = (r, c) => `${COLS[c]}${r + 1}`;
@@ -134,21 +135,21 @@ function shipIcon(d, rot = 0, flip = 0, on = false) {
   const u = 11;
   const svg = s('svg', { width: C * u + 2, height: R * u + 2, viewBox: `-1 -1 ${C * u + 2} ${R * u + 2}`, style: 'direction:ltr' });
   for (const [r, c] of cs) {
-    // columns are drawn right-to-left like on the board
-    svg.append(s('rect', { x: (C - 1 - c) * u, y: r * u, width: u, height: u, fill: '#3b3a36', 'fill-opacity': .28, stroke: '#3b3a36', 'stroke-width': 1.2 }));
+    // columns run the same way as on the board: right-to-left in Hebrew, left-to-right in English
+    svg.append(s('rect', { x: (HE ? C - 1 - c : c) * u, y: r * u, width: u, height: u, fill: '#3b3a36', 'fill-opacity': .28, stroke: '#3b3a36', 'stroke-width': 1.2 }));
   }
   return svg;
 }
 
 export default {
   id: 'ships',
-  title: 'צוללות',
-  sub: 'לוח 6×6 · צוללות 2, 3, 4 וצוללת ן · אסור שייגעו',
+  title: T('צוללות', 'Battleships'),
+  sub: T('לוח 6×6 · צוללות 2, 3, 4 וצוללת ן · אסור שייגעו', '6×6 board · subs of 2, 3, 4 and an L-sub · they can\'t touch'),
   help: [
-    'כל אחד מסדר 4 צוללות על הלוח שלו: 2, 3, 4 משבצות וצוללת בצורת ן. צוללות לא נוגעות זו בזו, גם לא באלכסון.',
-    'יורים בתורות על הלוח של השני: לחיצה בוחרת משבצת, לחיצה שנייה יורה.',
-    'פגיעה = <b>עוד ירייה</b>. החטאה = התור עובר.',
-    'מי שמטביע ראשון את כל הצוללות של השני מנצח.',
+    T('כל אחד מסדר 4 צוללות על הלוח שלו: 2, 3, 4 משבצות וצוללת בצורת ן. צוללות לא נוגעות זו בזו, גם לא באלכסון.', 'Each of you places 4 subs on your board: 2, 3 and 4 squares, and an L-shaped sub. Subs can\'t touch, not even diagonally.'),
+    T('יורים בתורות על הלוח של השני: לחיצה בוחרת משבצת, לחיצה שנייה יורה.', 'Take turns firing at the other board: one tap picks a square, a second tap fires.'),
+    T('פגיעה = <b>עוד ירייה</b>. החטאה = התור עובר.', 'Hit = <b>another shot</b>. Miss = the turn passes.'),
+    T('מי שמטביע ראשון את כל הצוללות של השני מנצח.', 'First to sink all the other one\'s subs wins.'),
   ],
 
   init(starter) {
@@ -188,23 +189,23 @@ export default {
   status(g, { me, other, names }) {
     if (g.phase === 'place') {
       return g.layouts[me]
-        ? { mine: false, text: `מחכים ש${names[other]} יסדר/תסדר את הצוללות…` }
-        : { mine: true, text: 'מסדרים את הצוללות 🚢' };
+        ? { mine: false, text: T(`מחכים ש${names[other]} יסדר/תסדר את הצוללות…`, `Waiting for ${names[other]} to place their subs…`) }
+        : { mine: true, text: T('מסדרים את הצוללות 🚢', 'Place your subs 🚢') };
     }
     let t = '';
     if (g.last) {
       // short enough for two lines on the smallest phones
-      const who = g.last.p === me ? 'ירית ב' : `${names[other]}: `;
-      const res = g.last.res === 'sunk' ? `טביעה! ${DEF[g.last.ship].name} 🌊` : g.last.res === 'hit' ? 'פגיעה! 💥' : 'החטאה';
+      const who = g.last.p === me ? T('ירית ב', 'You: ') : `${names[other]}: `;
+      const res = g.last.res === 'sunk' ? T(`טביעה! ${DEF[g.last.ship].name} 🌊`, `Sunk! ${DEF[g.last.ship].name} 🌊`) : g.last.res === 'hit' ? T('פגיעה! 💥', 'Hit! 💥') : T('החטאה', 'Miss');
       t = `${who}${coord(g.last.r, g.last.c)} – ${res} · `;
     }
     const again = g.last && g.last.res !== 'miss';
-    if (g.turn === me) return { mine: true, text: t + (again ? 'עוד תור! 🎯' : 'תורך! 🎯') };
-    return { mine: false, text: t + (again ? `${names[other]} ממשיך/ה…` : `התור של ${names[other]}`) };
+    if (g.turn === me) return { mine: true, text: t + (again ? T('עוד תור! 🎯', 'Go again! 🎯') : T('תורך! 🎯', 'Your turn! 🎯')) };
+    return { mine: false, text: t + (again ? T(`${names[other]} ממשיך/ה…`, `${names[other]} goes again…`) : T(`התור של ${names[other]}`, `${names[other]}\'s turn`)) };
   },
 
   overDetail(g, { me }) {
-    return g.over.winner === me ? 'כל הצוללות שלהם בקרקעית 🌊' : 'כל הצוללות שלך טבעו… 🫧';
+    return g.over.winner === me ? T('כל הצוללות שלהם בקרקעית 🌊', 'All their subs are on the sea floor 🌊') : T('כל הצוללות שלך טבעו… 🫧', 'All your subs sank… 🫧');
   },
 
   render(root, g, ctx) {
@@ -217,7 +218,7 @@ export default {
     if (g.phase === 'place') {
       if (g.layouts[me]) {
         const mine = g.layouts[me];
-        root.append(h('h3', { class: 'center' }, 'הצוללות שלי'), board({
+        root.append(h('h3', { class: 'center' }, T('הצוללות שלי', 'My subs')), board({
           cellInfo: (r, c) => ({ cls: shipAt(mine, r, c) ? 'ship' : '' }),
         }));
         return;
@@ -227,7 +228,7 @@ export default {
       const nextUnplaced = () => (SHIPS.find(d => !ui.placed[d.id]) || {}).id || null;
 
       root.append(h('p', { class: 'center soft', style: { margin: '2px 0' } },
-        'בוחרים צוללת ולוחצים על הלוח. לחיצה על צוללת מרימה אותה. צוללות לא נוגעות – גם לא באלכסון.'));
+        T('בוחרים צוללת ולוחצים על הלוח. לחיצה על צוללת מרימה אותה. צוללות לא נוגעות – גם לא באלכסון.', 'Pick a sub and tap the board. Tap a placed sub to pick it up. Subs can\'t touch – not even diagonally.')));
       root.append(h('div', { class: 'tray' }, SHIPS.map(d => h('button', {
         class: (ui.sel === d.id ? 'on' : '') + (ui.placed[d.id] ? ' placed' : ''),
         onclick: () => { delete ui.placed[d.id]; ui.sel = d.id; rerender(); },
@@ -244,7 +245,7 @@ export default {
           const or = Math.max(0, Math.max(...cs.map(x => x[0])) - (N - 1));
           const oc = Math.max(0, Math.max(...cs.map(x => x[1])) - (N - 1));
           cs = cs.map(([a, b]) => [a - or, b - oc]);
-          if (!fits(ui.placed, cs)) { toast('אסור שצוללות ייגעו זו בזו (גם לא באלכסון)'); return; }
+          if (!fits(ui.placed, cs)) { toast(T('אסור שצוללות ייגעו זו בזו (גם לא באלכסון)', 'Subs can\'t touch each other (not even diagonally)')); return; }
           ui.placed[ui.sel] = cs;
           ui.sel = nextUnplaced();
           rerender();
@@ -252,14 +253,14 @@ export default {
       }));
       const all = placedIds.length === SHIPS.length;
       root.append(h('div', { class: 'row center' },
-        h('button', { class: 'btn small', disabled: !ui.sel, onclick: () => { ui.rot = (ui.rot + 1) % 4; rerender(); } }, '↻ סיבוב'),
-        ui.sel === 'nun' ? h('button', { class: 'btn small', onclick: () => { ui.flip = 1 - ui.flip; rerender(); } }, '⇋ היפוך') : null,
-        h('button', { class: 'btn small', onclick: () => { ui.placed = randomLayout(); ui.sel = null; rerender(); } }, '🎲 אקראי'),
-        h('button', { class: 'btn small ghost', onclick: () => { ui.placed = {}; ui.sel = 'nun'; rerender(); } }, 'ניקוי')));
+        h('button', { class: 'btn small', disabled: !ui.sel, onclick: () => { ui.rot = (ui.rot + 1) % 4; rerender(); } }, T('↻ סיבוב', '↻ Rotate')),
+        ui.sel === 'nun' ? h('button', { class: 'btn small', onclick: () => { ui.flip = 1 - ui.flip; rerender(); } }, T('⇋ היפוך', '⇋ Flip')) : null,
+        h('button', { class: 'btn small', onclick: () => { ui.placed = randomLayout(); ui.sel = null; rerender(); } }, T('🎲 אקראי', '🎲 Random')),
+        h('button', { class: 'btn small ghost', onclick: () => { ui.placed = {}; ui.sel = 'nun'; rerender(); } }, T('ניקוי', 'Clear'))));
       root.append(h('div', { class: 'spacer' }), h('button', {
         class: 'btn big marker', disabled: !all,
         onclick: () => send({ k: 'ready', ships: SHIPS.map(d => ({ id: d.id, cells: ui.placed[d.id] })) }),
-      }, all ? 'מוכן! ⚓' : `נשארו ${SHIPS.length - placedIds.length} צוללות`));
+      }, all ? T('מוכן! ⚓', 'Ready! ⚓') : T(`נשארו ${SHIPS.length - placedIds.length} צוללות`, `${SHIPS.length - placedIds.length} subs left to place`)));
       return;
     }
 
@@ -271,7 +272,7 @@ export default {
     const sunkCells = new Set(g.sunk[me].flatMap(id => enemy.find(x => x.id === id).cells.map(([r, c]) => r * N + c)));
     if (ui.aim && (shotAt(g.shots[me], ui.aim.r, ui.aim.c) || auto.has(ui.aim.r * N + ui.aim.c))) ui.aim = null;
 
-    root.append(h('h3', { class: 'center', style: { color: theirInk } }, `הים של ${names[other]}`));
+    root.append(h('h3', { class: 'center', style: { color: theirInk } }, T(`הים של ${names[other]}`, `${names[other]}\'s sea`)));
     root.append(h('div', { class: 'fleet' }, SHIPS.map(d => h('span', { class: g.sunk[me].includes(d.id) ? 'sunk' : '' }, d.name))));
     root.append(board({
       cellInfo: (r, c) => {
@@ -294,11 +295,11 @@ export default {
       root.append(h('div', { class: 'center' }, h('button', {
         class: 'btn marker', disabled: !myTurn || !ui.aim, 'data-log': 'fire',
         onclick: () => { const { r, c } = ui.aim; ui.aim = null; send({ k: 'shot', r, c }); },
-      }, !myTurn ? `מחכים ל${names[other]}…` : ui.aim ? `אש על ${coord(ui.aim.r, ui.aim.c)}! 💥` : 'בוחרים משבצת לירות')));
+      }, !myTurn ? T(`מחכים ל${names[other]}…`, `Waiting for ${names[other]}…`) : ui.aim ? T(`אש על ${coord(ui.aim.r, ui.aim.c)}! 💥`, `Fire at ${coord(ui.aim.r, ui.aim.c)}! 💥`) : T('בוחרים משבצת לירות', 'Pick a square to fire at'))));
     }
 
     const mine = g.layouts[me];
-    root.append(h('hr', { class: 'pencil-line' }), h('h3', { class: 'center', style: { color: myInk } }, 'הים שלי'));
+    root.append(h('hr', { class: 'pencil-line' }), h('h3', { class: 'center', style: { color: myInk } }, T('הים שלי', 'My sea')));
     root.append(board({
       small: true,
       cellInfo: (r, c) => {

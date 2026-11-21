@@ -13,27 +13,40 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-title" content="דף ועיפרון">
 <meta name="description" content="חמישה משחקי דף ועיפרון לשניים, כל אחד בטלפון שלו: בול פגיעה, איש תלוי, צוללות, נקודות ו-5 בשורה. בחינם, בלי הרשמה.">
-<meta property="og:title" content="דף ועיפרון – 5 משחקים לשניים">
-<meta property="og:description" content="בול פגיעה · איש תלוי · צוללות · נקודות · 5 בשורה. בוא/י לשחק איתי!">
+<meta property="og:title" content="דף ועיפרון · Paper &amp; Pencil – 5 משחקים לשניים">
+<meta property="og:description" content="בול פגיעה · איש תלוי · צוללות · נקודות · 5 בשורה · 5 pencil-and-paper games for two, each on your own phone">
 <meta property="og:image" content="https://small-joys.com/icons/icon-maskable-512.png">
 <meta property="og:url" content="https://small-joys.com/">
 <meta property="og:type" content="website">
+<script>
+  // Language before anything is drawn: a Hebrew device gets Hebrew, any other gets English (same rule as js/i18n.js).
+  (function () {
+    var l = null;
+    try { var q = new URLSearchParams(location.search).get('lang'); if (q === 'he' || q === 'en') { l = q; localStorage.setItem('dv:lang', q); } } catch (e) { /* ignore */ }
+    if (!l) try { var s = localStorage.getItem('dv:lang'); if (s === 'he' || s === 'en') l = s; } catch (e) { /* ignore */ }
+    if (!l) l = /^(he|iw)\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '') ? 'he' : 'en';
+    window.__dvLang = l;
+    document.documentElement.lang = l;
+    document.documentElement.dir = l === 'he' ? 'rtl' : 'ltr';
+    if (l === 'en') document.title = 'Paper & Pencil';
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@400;700&family=Playpen+Sans+Hebrew:wght@400;600&family=Varela+Round&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2.6">
-<script src="js/vendor/paho-mqtt.min.js?v=2.6"></script>
-<script src="js/vendor/peerjs.min.js?v=2.6"></script>
+<link rel="stylesheet" href="style.css?v=2.7">
+<script src="js/vendor/paho-mqtt.min.js?v=2.7"></script>
+<script src="js/vendor/peerjs.min.js?v=2.7"></script>
 </head>
 <body>
 <div id="app"></div>
 <script>
   // Every script of one release is requested with the same ?v=, so a browser never runs a mix of
   // old and new files after an update.
-  window.__dvV = '2.6';
+  window.__dvV = '2.7';
   (function () {
     var v = window.__dvV, base = new URL('js/', document.baseURI).href, map = { imports: {} };
-    ['main', 'net', 'log', 'analytics', 'metrics', 'core', 'ui', 'sound', 'demo', 'games/bull', 'games/hangman', 'games/ships', 'games/dots', 'games/five']
+    ['main', 'i18n', 'net', 'log', 'analytics', 'metrics', 'core', 'ui', 'sound', 'demo', 'games/bull', 'games/hangman', 'games/ships', 'games/dots', 'games/five']
       .forEach(function (f) { map.imports[base + f + '.js'] = base + f + '.js?v=' + v; });
     var im = document.createElement('script'); im.type = 'importmap'; im.textContent = JSON.stringify(map);
     document.body.appendChild(im);

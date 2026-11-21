@@ -128,7 +128,7 @@ const drivers = {
 
 (async () => {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const ctx = await browser.newContext({ locale: 'he-IL', viewport: { width: 390, height: 844 } });
   const A = await ctx.newPage(), B = await ctx.newPage();
   const errs = [];
   for (const [n, p] of [['A', A], ['B', B]]) {
