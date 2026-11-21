@@ -22,9 +22,9 @@ if command -v xvfb-run >/dev/null && /usr/bin/python3.12 -c "import gi" 2>/dev/n
   step "WebKit (iPhone engine)"       tests/with-servers.sh tests/webkit-all.sh visual-out/webkit
 fi
 if [ "$1" = "live" ]; then
-  step "LIVE: turn look / sound / help" node tests/turn-ui.js https://yakijowejoy.github.io/5games/
-  step "LIVE: taps"                     node tests/interact.js https://yakijowejoy.github.io/5games/
-  step "LIVE: disconnects"              env MODE=live node tests/e2e-net.js https://yakijowejoy.github.io/5games/
+  step "LIVE: turn look / sound / help" node tests/turn-ui.js https://small-joys.com/
+  step "LIVE: taps"                     node tests/interact.js https://small-joys.com/
+  step "LIVE: disconnects"              env MODE=live node tests/e2e-net.js https://small-joys.com/
 fi
 [ $FAIL -eq 0 ] && echo "ALL GREEN" || echo "SOMETHING FAILED"
 exit $FAIL

@@ -51,6 +51,8 @@ tools/logs.sh 2h ab3k9   # שעתיים אחרונות, מכשיר מסוים (�
 Settings → Pages → Source: *Deploy from a branch* → בוחרים את הענף ואת התיקייה `/ (root)` → Save.
 אחרי דקה-שתיים האתר יהיה זמין בכתובת `https://<user>.github.io/5games/`.
 
+האתר החי: **https://small-joys.com/** (דומיין מותאם; הקובץ `CNAME` בענף חייב להישאר – בלעדיו הדומיין מתנתק).
+
 ## בדיקה מקומית
 ```
 python3 -m http.server 8000

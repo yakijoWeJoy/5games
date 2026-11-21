@@ -104,8 +104,8 @@ These are updated over time:
 Give every campaign link UTM tags. Use one `utm_content` per video, so you can see which video brings players who actually finish a game:
 
 ```
-Ad (paid):    https://yakijowejoy.github.io/5games/?utm_source=tiktok&utm_medium=paid&utm_campaign=launch&utm_content=video1
-Profile bio:  https://yakijowejoy.github.io/5games/?utm_source=tiktok&utm_medium=bio&utm_campaign=launch
+Ad (paid):    https://small-joys.com/?utm_source=tiktok&utm_medium=paid&utm_campaign=launch&utm_content=video1
+Profile bio:  https://small-joys.com/?utm_source=tiktok&utm_medium=bio&utm_campaign=launch
 ```
 
 - **Ad clicks without tags:** TikTok adds `ttclid` to ad clicks. A visit with `ttclid` is counted as `utm_source = tiktok` with `from_ad_click = true`. The click ID itself isn't stored.
