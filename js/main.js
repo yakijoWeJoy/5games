@@ -6,6 +6,7 @@ import { track, trackPageview, trackScreen, setContext, bump, lifetime, flush as
 import { gameEvents } from './metrics.js';
 import { GAMES, BY, STATE_V, NEED, cleanName, newState, reduce, seriesWins, seriesDone, seriesDecided, seriesLeader, nextGame } from './core.js';
 import { T, LANG, setLang } from './i18n.js';
+import { registerServiceWorker, installLink, installCard } from './install.js';
 
 const params = new URLSearchParams(location.search);
 const NS = 'dv:' + (params.get('local') || '') + ':';
@@ -51,6 +52,7 @@ let stateSeen = false;
 let helpEl = null;
 let lastView = null;
 let techOpen = false;
+let installClosed = false; // the "add to home screen" card was put away on this visit
 let seenState = null;   // analytics: the last state this phone saw (to tell what changed)
 let netT0 = 0;          // analytics: when this phone started connecting
 let everLinked = false; // analytics: linked at least once since startNet
@@ -589,12 +591,16 @@ function shareUrl() {
   if (LOCAL) u.searchParams.set('local', 'guest');
   const src = campaignSource(); // analytics: a friend invited by a campaign player still counts for the campaign
   if (src) u.searchParams.set('src', src);
+  // who invites: the friend trusts a name they know more than a site they do not (never sent to analytics)
+  if (myName()) u.searchParams.set('from', myName());
   return u.toString();
 }
 
+function myName() { return (state && state.players[me].name) || (session && session.name) || ''; }
+
 async function shareInvite(from) {
   const url = shareUrl();
-  const text = T(`בוא/י לשחק איתי בדף ועיפרון ✏️ (ותתקשר/י אליי – נדבר תוך כדי!) קוד: ${session.code}`, `Come play Paper & Pencil with me ✏️ (and call me – we\'ll talk while we play!) Code: ${session.code}`);
+  const text = T(`${myName()} מזמין/ה אותך לשחק איתי דף ועיפרון ✏️ 5 משחקים לשניים, בחינם ובלי הרשמה. (ותתקשר/י אליי – נדבר תוך כדי!) קוד: ${session.code}`, `${myName()} invites you to play Paper & Pencil ✏️ 5 games for two, free, no sign-up. (Call me – we\'ll talk while we play!) Code: ${session.code}`);
   const where = typeof from === 'string' ? from : 'invite_card';
   if (navigator.share) {
     try { await navigator.share({ title: T('דף ועיפרון', 'Paper & Pencil'), text, url }); track('invite_shared', { method: 'native_share', from: where }); return; } catch (e) {
@@ -618,7 +624,7 @@ function inviteCard() {
     h('div', { class: 'note tip' }, T('📞 לא באותו חדר? תתקשרו אחד לשני ושימו על רמקול – ככה זה מרגיש כמו פעם.', '📞 Not in the same room? Call each other and put it on speaker – it feels just like the old days.')),
     h('div', { class: 'row center' },
       h('button', { class: 'btn marker', 'data-log': 'share', onclick: shareInvite }, T('📤 שליחת הזמנה', '📤 Send invite')),
-      h('a', { class: 'btn', 'data-log': 'whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent(T('בוא/י לשחק איתי בדף ועיפרון ✏️ תתקשר/י אליי ונדבר תוך כדי המשחק 📞 ', 'Come play Paper & Pencil with me ✏️ Call me and we\'ll talk while we play 📞 ') + url), target: '_blank', rel: 'noopener', onclick: () => track('invite_shared', { method: 'whatsapp', from: 'invite_card' }, { now: true }) }, T('וואטסאפ', 'WhatsApp'))),
+      h('a', { class: 'btn', 'data-log': 'whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent(T(`${myName()} מזמין/ה אותך לשחק דף ועיפרון ✏️ 5 משחקים לשניים, בחינם ובלי הרשמה. תתקשר/י אליי ונדבר תוך כדי 📞 `, `${myName()} invites you to play Paper & Pencil ✏️ 5 games for two, free, no sign-up. Call me and we\'ll talk while we play 📞 `) + url), target: '_blank', rel: 'noopener', onclick: () => track('invite_shared', { method: 'whatsapp', from: 'invite_card' }, { now: true }) }, T('וואטסאפ', 'WhatsApp'))),
     h('div', { class: 'wait-line' + (offline ? ' bad' : '') },
       offline ? T('⚠️ אין אינטרנט בטלפון הזה – בדקו WiFi / גלישה', '⚠️ No internet on this phone – check Wi-Fi / mobile data') : [h('span', { class: 'spin' }), T('מחכים שמישהו יצטרף…', 'Waiting for someone to join…')]),
     h('button', { class: 'link-btn', 'data-log': 'tech', onclick: showTech }, T('משהו לא עובד?', 'Something not working?')));
@@ -650,6 +656,10 @@ function menuView(ctx) {
       h('span', { class: 'row-mark' }, mark)));
   });
 
+  if ((res.length || state.evening.some(x => x > 0)) && !installClosed) {
+    const card = installCard('menu', () => { installClosed = true; render(); });
+    if (card) wrap.append(card);
+  }
   wrap.append(seriesLine(ctx, true));
   if (verdict) wrap.append(h('div', { class: 'verdict center', style: { color: verdict.color } }, verdict.text));
   if (verdict && !verdict.done) wrap.append(h('p', { class: 'center soft', style: { margin: '2px 0' } }, T('רוצים להמשיך עד הסוף בשביל הספורט?', 'Want to play on to the end, just for fun?')));
@@ -748,7 +758,14 @@ function renderChat() {
 
 /* ======================= home / join ======================= */
 
+/** what a careful first-time visitor wants to know */
+const trustLine = () => h('div', { class: 'trust' }, T('בחינם · בלי הרשמה · בלי הורדה · בלי פרסומות', 'Free · no sign-up · no download · no ads'));
+
+/** the name in an invite link (?from=…), shown as text only */
+function inviterName() { return (params.get('from') || '').replace(/[<>]/g, '').trim().slice(0, 14); }
+
 function homeView(room) {
+  const from = room ? inviterName() : '';
   const nameIn = h('input', { class: 'paper', placeholder: T('השם שלי', 'My name'), maxlength: 14, value: store.get('name', '') });
   const codeIn = h('input', { class: 'paper code', placeholder: '____', inputmode: 'numeric', maxlength: 4, value: room || '' });
   const getName = () => {
@@ -779,12 +796,14 @@ function homeView(room) {
   ];
   if (room) {
     kids.push(h('div', { class: 'card stack center' },
-      h('h3', {}, T('הוזמנת לשחק!', 'You\'re invited to play!')),
+      h('h3', {}, from ? T(`${from} מזמין/ה אותך לשחק! 🎉`, `${from} invited you to play! 🎉`) : T('הוזמנת לשחק!', 'You\'re invited to play!')),
       h('div', {}, T('קוד הדף', 'Page code')), h('div', { class: 'code-big' }, room),
-      h('button', { class: 'btn big marker', onclick: () => { codeIn.value = room; join('invite_link'); } }, T('הצטרפות ✏️', 'Join ✏️'))));
+      h('button', { class: 'btn big marker', onclick: () => { codeIn.value = room; join('invite_link'); } }, T('הצטרפות ✏️', 'Join ✏️')),
+      trustLine()));
   } else {
     kids.push(
       h('button', { class: 'btn big marker mt', onclick: () => { const n = getName(); if (n) startHost(n); } }, T('📄 פותחים דף חדש', '📄 Start a new page')),
+      trustLine(),
       h('p', { class: 'center soft' }, T('— או —', '— or —')),
       h('div', { class: 'card stack' }, h('label', {}, T('יש לי קוד מהטלפון השני:', 'I have a code from the other phone:')), codeIn,
         h('button', { class: 'btn', onclick: () => join('typed_code') }, T('הצטרפות', 'Join'))));
@@ -796,6 +815,7 @@ function homeView(room) {
         h('li', {}, T('אחד פותח דף חדש ומקבל קוד של 4 ספרות.', 'One of you starts a new page and gets a 4-digit code.')),
         h('li', {}, T('השני מצטרף עם הקישור או עם הקוד.', 'The other joins with the link or the code.')),
         h('li', {}, T('משחקים סדרה של חמישה משחקים – הטוב מחמישה מנצח.', 'Play a series of five games – best of five wins.')))),
+    room ? null : h('div', { class: 'center' }, installLink('home')),
     h('p', { class: 'center soft', style: { fontSize: '12px' } }, T(`גרסה ${VERSION} · האתר שולח נתוני שימוש ונתוני חיבור אנונימיים כדי לשפר את המשחקים ולאתר תקלות (בלי שמות ובלי תוכן המשחק).`, `Version ${VERSION} · The site sends anonymous usage and connection data to improve the games and find problems (no names, no game content).`)));
   viewIs(room ? 'join' : 'home');
   app.replaceChildren(...kids.filter(Boolean));
@@ -887,6 +907,7 @@ function validState(s) {
 
 async function boot() {
   if (mixedVersions()) return;
+  if (!DEMO) registerServiceWorker();
   if (DEMO) {
     const { demoState } = await import('./demo.js');
     me = params.get('me') === '1' ? 1 : 0;

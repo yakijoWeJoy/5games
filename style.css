@@ -444,3 +444,12 @@ body.my-turn::after {
 /* language switch on the home screen */
 .lang-switch { display: flex; justify-content: flex-end; margin: 4px 0 -14px; }
 .lang-switch .link-btn { font-size: 15px; }
+
+/* add to home screen */
+.install-card { margin-top: 12px; }
+.install-row { display: flex; gap: 12px; align-items: center; text-align: start; }
+.install-row img { border-radius: 11px; flex: none; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.install-row .soft { font-size: 14px; }
+.install-link { margin-top: 4px; font-size: 15px; }
+/* reassurance for a first-time visitor */
+.trust { text-align: center; color: var(--pencil-soft); font-size: 14px; margin-top: 6px; }

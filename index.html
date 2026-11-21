@@ -15,7 +15,10 @@
 <meta name="description" content="חמישה משחקי דף ועיפרון לשניים, כל אחד בטלפון שלו: בול פגיעה, איש תלוי, צוללות, נקודות ו-5 בשורה. בחינם, בלי הרשמה.">
 <meta property="og:title" content="דף ועיפרון · Paper &amp; Pencil – 5 משחקים לשניים">
 <meta property="og:description" content="בול פגיעה · איש תלוי · צוללות · נקודות · 5 בשורה · 5 pencil-and-paper games for two, each on your own phone">
-<meta property="og:image" content="https://small-joys.com/icons/icon-maskable-512.png">
+<meta property="og:image" content="https://small-joys.com/icons/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <meta property="og:url" content="https://small-joys.com/">
 <meta property="og:type" content="website">
 <script>
@@ -34,19 +37,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@400;700&family=Playpen+Sans+Hebrew:wght@400;600&family=Varela+Round&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2.7">
-<script src="js/vendor/paho-mqtt.min.js?v=2.7"></script>
-<script src="js/vendor/peerjs.min.js?v=2.7"></script>
+<link rel="stylesheet" href="style.css?v=2.8">
+<script src="js/vendor/paho-mqtt.min.js?v=2.8"></script>
+<script src="js/vendor/peerjs.min.js?v=2.8"></script>
 </head>
 <body>
 <div id="app"></div>
 <script>
   // Every script of one release is requested with the same ?v=, so a browser never runs a mix of
   // old and new files after an update.
-  window.__dvV = '2.7';
+  window.__dvV = '2.8';
   (function () {
     var v = window.__dvV, base = new URL('js/', document.baseURI).href, map = { imports: {} };
-    ['main', 'i18n', 'net', 'log', 'analytics', 'metrics', 'core', 'ui', 'sound', 'demo', 'games/bull', 'games/hangman', 'games/ships', 'games/dots', 'games/five']
+    ['main', 'i18n', 'install', 'net', 'log', 'analytics', 'metrics', 'core', 'ui', 'sound', 'demo', 'games/bull', 'games/hangman', 'games/ships', 'games/dots', 'games/five']
       .forEach(function (f) { map.imports[base + f + '.js'] = base + f + '.js?v=' + v; });
     var im = document.createElement('script'); im.type = 'importmap'; im.textContent = JSON.stringify(map);
     document.body.appendChild(im);
