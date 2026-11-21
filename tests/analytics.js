@@ -124,6 +124,27 @@ const UUID7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
   check(!JSON.stringify(tt).includes('abc123secret'), 'the TikTok click id itself is not stored');
   await ctx3.close();
 
+  // a guest phone with a copy of the game saved by an old version (before the series existed) must not crash
+  {
+    const c4 = await browser.newContext();
+    await c4.addInitScript(() => { window.__dvAnalytics = { key: 'phc_test', host: 'https://ph.test' }; });
+    const got = [];
+    await c4.route('https://ph.test/**', async r => { try { got.push(...JSON.parse(r.request().postData()).batch); } catch { /* */ } await r.fulfill({ status: 200, body: '{}' }); });
+    const O = await c4.newPage();
+    const oe = []; O.on('pageerror', e => oe.push(e.message));
+    await O.goto(BASE + '?local=old');
+    await O.evaluate(() => {
+      localStorage.setItem('dv:old:session', JSON.stringify({ role: 'guest', code: '4444', token: 'tok', name: 'x' }));
+      localStorage.setItem('dv:old:gstate:4444', JSON.stringify({ rev: 7, players: [{ name: 'a', token: 'h' }, { name: 'x', token: 'tok' }], current: 'bull', game: { id: 'g1', phase: 'secret', secrets: [null, null] }, chat: [], scores: [1, 0] }));
+    });
+    await O.reload(); await sleep(1500);
+    await O.evaluate(() => window.__dv.flushAnalytics()); await sleep(300);
+    check(oe.length === 0, 'an old saved game does not crash the page' + (oe.length ? ': ' + oe[0] : ''));
+    check(!!(await O.$('.conn')) && (await O.evaluate(() => window.__dv.state)) === null, 'it is dropped and the phone waits for a fresh copy from the host');
+    check(got.some(e => e.event === 'stale_saved_game_dropped'), 'the drop is reported');
+    await c4.close();
+  }
+
   // demo / local runs without the test switch send nothing
   const ctx2 = await browser.newContext();
   let leaked = 0;

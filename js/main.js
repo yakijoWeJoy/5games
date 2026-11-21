@@ -874,6 +874,11 @@ function mixedVersions() {
   return true;
 }
 
+/** a saved/received state this version can work with */
+function validState(s) {
+  return !!(s && s.v === STATE_V && s.series && Array.isArray(s.series.results) && Array.isArray(s.players) && s.players.length === 2 && Array.isArray(s.evening) && Array.isArray(s.chat));
+}
+
 async function boot() {
   if (mixedVersions()) return;
   if (DEMO) {
@@ -895,11 +900,12 @@ async function boot() {
   if (session && (!room || room === session.code)) {
     if (session.role === 'host') {
       state = store.get('state:' + session.code, null) || newState(session.name, session.token);
-      if (state.v !== STATE_V) {
+      if (!validState(state)) {
         // saved by an older version of the site: keep the people, start the scoring fresh
         const old = state;
         state = newState(session.name, session.token);
-        state.players = old.players; state.sid = old.sid || state.sid; state.chat = old.chat || []; state.banned = old.banned;
+        if (Array.isArray(old.players) && old.players.length === 2) state.players = old.players;
+        state.sid = old.sid || state.sid; state.chat = Array.isArray(old.chat) ? old.chat : []; state.banned = old.banned;
         state.rev = (old.rev || 0) + 1;
       }
       if (!state.acks) state.acks = [];
@@ -907,6 +913,9 @@ async function boot() {
       if (session.fresh) { session.fresh = false; store.set('session', session); }
     } else {
       state = store.get('gstate:' + session.code, null);
+      // a copy saved by an older version of the site (e.g. before the best-of-five series) cannot be drawn:
+      // drop it and take a fresh copy from the host instead of crashing on every load
+      if (state && !validState(state)) { log('stale-gstate', state.v, true); track('stale_saved_game_dropped', { saved_v: state.v || 0 }); store.del('gstate:' + session.code); state = null; }
     }
     startNet();
     state ? onState() : render();

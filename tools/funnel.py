@@ -85,8 +85,9 @@ def count(players, key):
 print(f'New players in the last {DAYS} days{" from " + SRC if SRC else ""}: {len(P)}')
 if not P: sys.exit()
 
-for path, who in (('HOST path (opened the site directly, makes a room)', lambda p: p['entry'] != 'invite_link'),
-                  ('GUEST path (came through an invite link)', lambda p: p['entry'] == 'invite_link')):
+is_guest = lambda p: p['entry'] == 'invite_link' or (p['joined'] and not p['hosted'])
+for path, who in (('HOST path (opened the site, makes a room)', lambda p: not is_guest(p)),
+                  ('GUEST path (invite link or typed a code)', is_guest)):
     G = [p for p in P if who(p)]
     if not G: continue
     first = 'hosted' if 'HOST' in path else 'joined'
