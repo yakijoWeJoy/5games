@@ -458,3 +458,8 @@ body.my-turn::after {
 .nudge-row { justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 /* coming from an ad */
 .landing-pitch { font-size: 19px; line-height: 1.45; margin: 6px 4px 2px; }
+
+/* the pair's own room */
+.our-room { margin-top: 12px; text-align: start; background: #fffbe0; }
+.our-room .soft { font-size: 15px; margin: 4px 0 8px; }
+.our-room .row { align-items: center; gap: 10px; }

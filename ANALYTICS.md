@@ -76,6 +76,10 @@ The following properties are on **every event**:
 | `tutorial_closed` | `game`, `trigger`, `seconds_open` |
 | `note_sent` | `kind` (`quick` + which ready-made note, or `typed` + `length` bucket) |
 | `sound_toggled` | `on` |
+| `our_room_shown` | `where` (result / menu) – the "📌 your room" card after a full series |
+| `again_tomorrow_sent` | `where`, `method`, `role` – "📅 again tomorrow?" sent to the friend |
+| `host_nudged` / `guest_nudged` | `method`, `in_game`, `seconds_waiting` – "tell them I'm here / back" |
+| `returned_to_room` | `role`, `hours_away`, `days_away`, `via_link`, `came_back_by_partner_message` – **the return metric**: back in the room after 6+ hours |
 | `language_switched` | `from`, `to`, `screen` (the עברית / English switch on the home screen) |
 | `partner_replaced` | `series_n` |
 | `room_left` | `in_game`, `series_n`, `games_in_series`, `partner_joined`, `minutes_in_room` |

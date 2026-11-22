@@ -70,6 +70,57 @@ const stubShare = () => { window.__shared = []; navigator.share = d => { window.
     await ctx.close();
   }
 
+  // ----- "our room": after a full series the pair keeps the link and can call each other back -----
+  {
+    const ctx = await browser.newContext({ locale: 'he-IL', viewport: { width: 390, height: 844 } });
+    await ctx.addInitScript(stubShare);
+    const p = await ctx.newPage(); p.on('pageerror', e => errs.push('our room: ' + e.message));
+    await p.goto(BASE + '?demo=five-over&me=0'); await sleep(500);
+    check(!!(await p.$('.result .our-room')), 'after the fifth game: "📌 your room" under the result');
+    await p.click('.our-room button[data-log="again-tomorrow"]'); await sleep(300);
+    const sh = await p.evaluate(() => window.__shared);
+    check(sh.length === 1 && /נמשיך מחר/.test(sh[0].text) && /room=4821/.test(sh[0].text), '"again tomorrow?" sends the same link to the friend');
+    await p.goto(BASE + '?demo=done-menu&me=1'); await sleep(500);
+    check(!!(await p.$('.menu .our-room')), 'the table shows "your room" once the pair finished a series');
+    await p.goto(BASE + '?demo=menu-mid&me=0'); await sleep(500);
+    check(!(await p.$('.our-room')), 'not before a full series');
+    await ctx.close();
+  }
+  {
+    // the host comes back first, the guest is away: the host calls the guest back
+    const ctx = await browser.newContext({ locale: 'he-IL', viewport: { width: 390, height: 844 } });
+    await ctx.addInitScript(() => { window.__dvTest = true; window.__dvNoHelp = true; window.__dvAnalytics = { key: 'phc_test', host: 'https://ph.test' }; });
+    await ctx.addInitScript(stubShare);
+    const events = [];
+    await ctx.route('https://ph.test/**', async r => { try { events.push(...JSON.parse(r.request().postData()).batch); } catch { /* */ } await r.fulfill({ status: 200, body: '{}' }); });
+    const A = await ctx.newPage(), B = await ctx.newPage();
+    for (const [n, p] of [['A', A], ['B', B]]) p.on('pageerror', e => errs.push(n + ': ' + e.message));
+    await A.goto(BASE + '?local=host'); await A.fill('input.paper', 'אבאלה'); await A.click('text=פותחים דף חדש');
+    const code = (await A.textContent('.code-big')).trim();
+    await B.goto(BASE + `?local=guest&room=${code}`); await B.fill('input.paper', 'נועהלה'); await B.click('text=הצטרפות ✏️');
+    await A.waitForSelector('.game-row'); await B.waitForSelector('.game-row');
+    await B.close(); await A.close();
+    // the next day: the host opens the site; pretend the last visit was 20 hours ago
+    const A2 = await ctx.newPage(); A2.on('pageerror', e => errs.push('A2: ' + e.message));
+    await A2.goto(BASE + '?local=host');
+    await A2.evaluate(() => { const k = 'dv:host:session'; const s = JSON.parse(localStorage.getItem(k)); s.lastActive = Date.now() - 20 * 3600000; localStorage.setItem(k, JSON.stringify(s)); });
+    await A2.reload();
+    await A2.waitForSelector('button[data-log="nudge-guest"]', { timeout: 30000 });
+    check(/נועהלה/.test(await A2.textContent('button[data-log="nudge-guest"]')), 'the host who came back gets "📲 tell <friend> I\'m back"');
+    await A2.click('button[data-log="nudge-guest"]'); await sleep(300);
+    const text = (await A2.evaluate(() => window.__shared))[0].text;
+    check(/חזרתי לחדר שלנו/.test(text) && new RegExp(`room=${code}`).test(text), 'the message links the friend back to the same room');
+    const B2 = await ctx.newPage(); B2.on('pageerror', e => errs.push('B2: ' + e.message));
+    await B2.goto(text.slice(text.indexOf('http')).replace('local=guest', 'local=guest'));
+    const met = await A2.waitForFunction(() => window.__dv.link === 'linked', null, { timeout: 40000 }).then(() => true).catch(() => false);
+    check(met && await B2.evaluate(() => window.__dv.session && window.__dv.session.role === 'guest'), 'the friend taps it and they are together again in the same room');
+    await A2.evaluate(() => window.__dv.flushAnalytics()); await sleep(400);
+    const back = events.find(e => e.event === 'returned_to_room');
+    check(back && back.properties.role === 'host' && back.properties.hours_away >= 19, 'analytics: returned_to_room (role, hours away)');
+    check(events.some(e => e.event === 'guest_nudged'), 'analytics: guest_nudged');
+    await ctx.close();
+  }
+
   check(errs.length === 0, 'no page errors' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   await browser.close();
   console.log(failed ? `${failed} FAILED` : 'friend: all checks passed');

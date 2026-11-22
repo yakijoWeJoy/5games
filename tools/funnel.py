@@ -146,3 +146,20 @@ errs = q(f"""SELECT toString(properties.message), toString(properties.app_versio
 if errs:
     print('\n=== top script errors')
     for m, v, n in errs: print(f'   {n:>4}  v{v}  {m}')
+
+# ----- coming back: the goal is pairs who play again on another day -----
+print('\n=== coming back (all players, not only new ones)')
+r = q(f"""SELECT count(), uniq(distinct_id), avg(toFloat(properties.hours_away)) FROM events
+  WHERE event = 'returned_to_room' AND timestamp > now() - INTERVAL {DAYS} DAY""")[0]
+print(f'   back in their room after 6+ hours: {r[0]} visits by {r[1]} phones (on average after {(r[2] or 0):.0f} hours)')
+r = q(f"""SELECT uniq(distinct_id) FROM (
+    SELECT distinct_id, uniq(toDate(toTimeZone(timestamp, 'Asia/Jerusalem'))) AS days FROM events
+    WHERE event = 'game_completed' AND timestamp > now() - INTERVAL {DAYS} DAY GROUP BY distinct_id) WHERE days >= 2""")[0]
+print(f'   phones that finished games on 2+ different days: {r[0]}')
+r = q(f"""SELECT uniq(room) FROM (
+    SELECT toString(properties.room_id) AS room, uniq(toDate(toTimeZone(timestamp, 'Asia/Jerusalem'))) AS days FROM events
+    WHERE event = 'game_completed' AND toString(properties.role) = 'host' AND timestamp > now() - INTERVAL {DAYS} DAY GROUP BY room) WHERE days >= 2""")[0]
+print(f'   rooms (pairs) that played on 2+ different days: {r[0]}')
+for ev in ('again_tomorrow_sent', 'host_nudged', 'guest_nudged', 'app_installed'):
+    n = q(f"SELECT count(), uniq(distinct_id) FROM events WHERE event = '{ev}' AND timestamp > now() - INTERVAL {DAYS} DAY")[0]
+    print(f'   {ev:<22} {n[0]:>4} times by {n[1]} phones')

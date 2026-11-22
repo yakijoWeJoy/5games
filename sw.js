@@ -3,7 +3,7 @@
  * while online; the copy kept here is used only when there is no internet (the game then explains
  * that it needs a connection). Bump CACHE with every release.
  */
-const CACHE = 'dv-3.0';
+const CACHE = 'dv-3.1';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => {

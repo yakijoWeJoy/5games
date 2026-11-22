@@ -238,6 +238,10 @@ function ctxFor() {
 }
 
 function onState() {
+  if (session && !DEMO) {
+    const now = Date.now();
+    if (!session.lastActive || now - session.lastActive > 60000) { session.lastActive = now; store.set('session', session); }
+  }
   // product analytics: games / series started, finished, abandoned (both phones report, tagged with role)
   for (const e of gameEvents(seenState, state, me)) {
     let set;
@@ -441,12 +445,14 @@ function roomLink() {
   return u.toString();
 }
 function nudgeText() {
+  // the host calls the guest back to their room; the guest calls the host
+  if (me === 0) return T(`${myName()} כאן ✏️ חזרתי לחדר שלנו בדף ועיפרון – בוא/י נמשיך! `, `${myName()} here ✏️ I\'m back in our Paper & Pencil room – come play! `) + shareUrl();
   return T(`${myName()} כאן ✏️ פתחתי את דף ועיפרון ואני מחכה לך – בוא/י לשחק! `, `${myName()} here ✏️ I opened Paper & Pencil and I\'m waiting for you – come play! `) + roomLink();
 }
 let nudges = 0;
 function nudgeTracked(method) {
   nudges++;
-  track('host_nudged', { method, in_game: !!state, seconds_waiting: netT0 ? Math.round((Date.now() - netT0) / 1000) : null, nudge_n: nudges }, { now: true });
+  track(me === 0 ? 'guest_nudged' : 'host_nudged', { method, in_game: !!state, seconds_waiting: netT0 ? Math.round((Date.now() - netT0) / 1000) : null, nudge_n: nudges }, { now: true });
 }
 async function nudgeHost() {
   const text = nudgeText();
@@ -473,9 +479,9 @@ function connNote() {
   } else if (me === 0) {
     title = joined ? T(`מחכים ש${other} יחזור/תחזור…`, `Waiting for ${other} to come back…`) : T('מחכים שמישהו יצטרף…', 'Waiting for someone to join…');
     lines = joined
-      ? [T('המשחק שמור ולא הולך לאיבוד.', 'The game is saved and won\'t be lost.'), T(`אצל ${other}: פותחים שוב את המשחק (אותו קישור) והוא ממשיך מאותה נקודה.`, `${other} just needs to open the game again (same link) and it continues where you left off.`)]
+      ? [T('המשחק שמור ולא הולך לאיבוד.', 'The game is saved and won\'t be lost.'), T(`שלחו ל${other} הודעה שחזרתם – כשיפתח/תפתח את הקישור, תתחברו לבד.`, `Send ${other} a message that you\'re back – when they open the link, you\'ll connect by yourselves.`)]
       : [T(`הקוד של הדף: ${code}`, `Page code: ${code}`)];
-    busy = true;
+    busy = true; nudge = joined;
   } else if (link === 'no-host') {
     // the inviter is simply not there right now: let them know we arrived, they come back through the link
     const host = guestHostName();
@@ -494,7 +500,9 @@ function connNote() {
     h('div', { class: 'conn-title' }, busy ? h('span', { class: 'spin' }) : '⚠️ ', title),
     lines.map(l => h('div', { class: 'conn-line' }, l)),
     nudge ? h('div', { class: 'row nudge-row' },
-      h('button', { class: 'btn marker', 'data-log': 'nudge-host', onclick: () => nudgeHost('share') }, T(`📲 להגיד ל${guestHostName() || 'מי שהזמין'} שהגעתי`, `📲 Tell ${guestHostName() || 'them'} I\'m here`)),
+      me === 0
+        ? h('button', { class: 'btn marker', 'data-log': 'nudge-guest', onclick: () => nudgeHost('share') }, T(`📲 להגיד ל${other} שחזרתי`, `📲 Tell ${other} I\'m back`))
+        : h('button', { class: 'btn marker', 'data-log': 'nudge-host', onclick: () => nudgeHost('share') }, T(`📲 להגיד ל${guestHostName() || 'מי שהזמין'} שהגעתי`, `📲 Tell ${guestHostName() || 'them'} I\'m here`)),
       h('a', { class: 'btn small', 'data-log': 'nudge-whatsapp', href: 'https://wa.me/?text=' + encodeURIComponent(nudgeText()), target: '_blank', rel: 'noopener', onclick: () => nudgeTracked('whatsapp') }, T('וואטסאפ', 'WhatsApp'))) : null,
     h('div', { class: 'conn-actions' },
       retry || nudge ? h('button', { class: (nudge ? 'link-btn' : 'btn small marker'), 'data-log': 'retry', onclick: () => { net && net.wake(); toast(T('מנסה שוב…', 'Trying again…')); } }, T('לנסות שוב', 'Try again')) : null,
@@ -616,7 +624,38 @@ function resultCard(G, ctx) {
     h('div', { class: 'row center' }, inSeries ? seriesButtons(true) : null),
     h('div', { class: 'row center', style: { marginTop: '6px' } },
       canReplay ? h('button', { class: 'btn ghost small', 'data-log': 'replay', onclick: askReplay }, T('↺ משחק חוזר', '↺ Rematch')) : null,
-      h('button', { class: 'btn ghost small', 'data-log': 'to-table', onclick: () => act({ k: 'menu' }) }, T('לטבלה', 'To the table'))));
+      h('button', { class: 'btn ghost small', 'data-log': 'to-table', onclick: () => act({ k: 'menu' }) }, T('לטבלה', 'To the table'))),
+    inSeries && seriesDone(state) ? ourRoomCard('result') : null);
+}
+
+/** the two of you have a room: a full series was played here (this series or an earlier one tonight) */
+function hasHistory() { return seriesDone(state) || state.evening.some(x => x > 0); }
+let ourRoomSent = false;
+const ourRoomSeen = new Set();
+/** "📌 your room": the link stays yours – come back tomorrow, the table carries on */
+function ourRoomCard(where) {
+  if (!state.players[1].token) return null;
+  const other = state.players[1 - me].name || T('החבר/ה', 'your friend');
+  if (!ourRoomSeen.has(where)) { ourRoomSeen.add(where); track('our_room_shown', { where, series_n: state.series.n }); } // once per screen per visit
+  return h('div', { class: 'card our-room' },
+    h('b', {}, T('📌 החדר שלכם', '📌 Your room')),
+    h('div', { class: 'soft' }, T(`הקישור הזה נשאר שלך ושל ${other}. מחר פשוט פותחים את המשחק – וסדרות הערב ממשיכות מאותו מקום.`, `This link stays yours and ${other}\'s. Tomorrow just open the game again – and your series table carries on.`)),
+    h('div', { class: 'row center' },
+      h('button', { class: 'btn small marker', 'data-log': 'again-tomorrow', onclick: () => againTomorrow(where) }, ourRoomSent ? T('📅 נשלח ✓', '📅 Sent ✓') : T('📅 נמשיך מחר?', '📅 Again tomorrow?')),
+      installLink('our_room')));
+}
+/** link for the other one of the pair: both phones already hold this room, so it simply reopens it */
+function partnerLink() { return me === 0 ? shareUrl() : roomLink(); }
+async function againTomorrow(where) {
+  const text = T(`${myName()}: היה כיף! 😄 נמשיך מחר עוד סדרה? אותו קישור: `, `${myName()}: That was fun! 😄 Another series tomorrow? Same link: `) + partnerLink();
+  let method = 'whatsapp';
+  if (navigator.share) {
+    try { await navigator.share({ text }); method = 'native_share'; } catch (e) { if (e && e.name === 'AbortError') return; method = null; }
+  }
+  if (method === 'whatsapp' || method === null) { method = 'whatsapp'; window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener'); }
+  ourRoomSent = true;
+  track('again_tomorrow_sent', { where, method, role: session.role, series_n: state.series.n }, { now: true });
+  render();
 }
 
 const TOGETHER = T('הכי כיף כשיושבים אחד ליד השני – או מדברים בטלפון (על רמקול) תוך כדי המשחק. חצי מהכיף זה הדיבורים 🙂', 'It\'s most fun sitting next to each other – or talking on the phone (on speaker) while you play. Half the fun is the chatting 🙂');
@@ -693,7 +732,10 @@ function menuView(ctx) {
       h('span', { class: 'row-mark' }, mark)));
   });
 
-  if ((res.length || state.evening.some(x => x > 0)) && !installClosed) {
+  if (joined && hasHistory()) {
+    const card = ourRoomCard('menu');
+    if (card) wrap.append(card);
+  } else if ((res.length || state.evening.some(x => x > 0)) && !installClosed) {
     const card = installCard('menu', () => { installClosed = true; render(); });
     if (card) wrap.append(card);
   }
@@ -995,6 +1037,15 @@ async function boot() {
       // a copy saved by an older version of the site (e.g. before the best-of-five series) cannot be drawn:
       // drop it and take a fresh copy from the host instead of crashing on every load
       if (state && !validState(state)) { log('stale-gstate', state.v, true); track('stale_saved_game_dropped', { saved_v: state.v || 0 }); store.del('gstate:' + session.code); state = null; }
+    }
+    // back in the room after a while: the number that tells us whether pairs come back
+    const away = session.lastActive ? Date.now() - session.lastActive : 0;
+    if (away > 6 * 3600000) {
+      track('returned_to_room', {
+        role: session.role, hours_away: Math.round(away / 3600000), days_away: Math.floor(away / 86400000),
+        room_id: state ? state.sid : null, series_before: state ? state.series.n - 1 + (seriesDone(state) ? 1 : 0) : null,
+        via_link: !!room, came_back_by_partner_message: params.has('back') || params.has('from'),
+      }, { now: true });
     }
     startNet();
     state ? onState() : render();
